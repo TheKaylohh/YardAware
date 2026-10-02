@@ -1,0 +1,24 @@
+/* Signed-in user area in the top bar. Kept in its own file so app.css stays untouched. */
+.user { display: flex; align-items: center; gap: 10px; white-space: nowrap; }
+.user-name { font-size: 14px; font-weight: 600; }
+.user-role {
+  padding: 1px 9px;
+  border: 1px solid rgba(255, 255, 255, .35);
+  border-radius: 10px;
+  font-size: 12px;
+  color: #C9D4DA;
+}
+.user-out {
+  padding: 5px 10px;
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, .35);
+  border-radius: 4px;
+  color: #F2F4EF;
+  font-size: 13px;
+  font-weight: 600;
+}
+.user-out:hover { background: rgba(255, 255, 255, .12); }
+
+@media (max-width: 760px) {
+  .user-name { display: none; }
+}

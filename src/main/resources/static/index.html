@@ -1,0 +1,72 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Yard Tracker</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/auth.css">
+</head>
+<body data-mode="view">
+  <header class="bar">
+    <div class="brand">
+      <svg class="brand-mark" viewBox="0 0 28 28" width="28" height="28" aria-hidden="true">
+        <path d="M2 16h24l-4 8H6z" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>
+        <path d="M7 16v-6h8v6M20 16V5h4" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linejoin="round"/>
+      </svg>
+      <span class="brand-name">Yard Tracker</span>
+      <span class="brand-site">Philadelphia yard</span>
+    </div>
+
+    <div class="filters" id="filters" role="group" aria-label="Show hulls"></div>
+
+    <div class="spacer"></div>
+
+    <div class="search">
+      <input id="search" type="search" placeholder="Find an item" aria-label="Find an item" autocomplete="off">
+    </div>
+
+    <div class="edit-actions" id="edit-actions" hidden>
+      <button class="bar-btn" id="btn-add" type="button">Add item</button>
+      <button class="bar-btn" id="btn-assemble" type="button">Assemble</button>
+    </div>
+
+    <div class="user" id="user" hidden>
+      <span class="user-name" id="user-name"></span>
+      <span class="user-role" id="user-role"></span>
+      <button class="user-out" id="btn-signout" type="button">Sign out</button>
+    </div>
+
+    <div class="mode" role="group" aria-label="Mode">
+      <button type="button" data-mode-btn="view" aria-pressed="true">View</button>
+      <button type="button" data-mode-btn="edit" aria-pressed="false">Edit</button>
+    </div>
+  </header>
+
+  <main>
+    <div id="map-wrap">
+      <div class="map-controls" aria-label="Map zoom">
+        <button class="map-btn" id="zoom-in" type="button" aria-label="Zoom in">+</button>
+        <button class="map-btn" id="zoom-out" type="button" aria-label="Zoom out">&minus;</button>
+        <button class="map-btn map-btn-text" id="zoom-fit" type="button">Fit</button>
+      </div>
+
+      <p id="map-hint" hidden>Drag a tile onto another zone to move it.</p>
+
+      <div id="assemble-bar" class="assemble-bar" hidden>
+        <span id="assemble-count">Select the pieces to join</span>
+        <button class="bar-btn bar-btn-dark" id="assemble-cancel" type="button">Cancel</button>
+        <button class="bar-btn bar-btn-solid" id="assemble-go" type="button" disabled>Continue</button>
+      </div>
+    </div>
+
+    <aside id="panel" class="panel" aria-label="Item details" aria-hidden="true"></aside>
+  </main>
+
+  <dialog id="modal"></dialog>
+  <div id="toasts" aria-live="polite"></div>
+
+  <script type="module" src="/js/main.js"></script>
+</body>
+</html>
