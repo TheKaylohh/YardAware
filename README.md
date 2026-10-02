@@ -10,8 +10,12 @@ Java 21, Spring Boot 3.5, Gradle, H2 (file database), and a plain JavaScript fro
 You need Java 21. Gradle is not required; the wrapper downloads it on first use.
 
 ```
-./gradlew bootRun        # Windows: gradlew.bat bootRun
+./gradlew bootRun        # Windows: gradlew.bat bootRun   (uses the dev profile automatically)
 ```
+
+Production: build with `./gradlew bootJar`, run the jar with `SPRING_PROFILES_ACTIVE=prod` and the environment
+variables listed in `application-prod.properties` (PostgreSQL, identity provider, role lists).
+The app refuses to start outside the dev profile if a development-only setting is still on.
 
 Open http://localhost:8080 and sign in (see below).
 
@@ -29,7 +33,7 @@ If the wrapper fails to start, install Gradle once and run `gradle wrapper`, or 
 which imports the Gradle build directly.
 
 The H2 console is at http://localhost:8080/h2-console (JDBC URL `jdbc:h2:file:./data/yard`, user `sa`, no password).
-It is admin-only (sign in as `admin`). Turn the console off (`spring.h2.console.enabled=false`) before exposing this beyond your machine.
+It is admin-only (sign in as `admin`) and only exists in the dev profile.
 
 ## How it works
 

@@ -27,7 +27,8 @@ final class OAuth2RoleMapping {
     private OAuth2RoleMapping() {
     }
 
-    static OAuth2UserService<OidcUserRequest, OidcUser> oidc(RolesLookupService roles, String usernameClaim) {
+    static OAuth2UserService<OidcUserRequest, OidcUser> oidc(RolesLookupService roles, String usernameClaim,
+                                                             boolean trustUnverifiedEmail) {
         OidcUserService delegate = new OidcUserService();
         return request -> {
             OidcUser loaded = delegate.loadUser(request);
@@ -35,22 +36,37 @@ final class OAuth2RoleMapping {
             // The claim that identifies the user in the Activity log; "sub" is always present as a fallback.
             String nameKey = claims.get(usernameClaim) != null ? usernameClaim : IdTokenClaimNames.SUB;
             Set<GrantedAuthority> authorities = new LinkedHashSet<>(loaded.getAuthorities());
-            addRoles(authorities, roles, String.valueOf(claims.get(nameKey)), claims.get("email"));
+            Object email = trusted(claims.get("email"), claims.get("email_verified"), trustUnverifiedEmail);
+            addRoles(authorities, roles, String.valueOf(claims.get(nameKey)), email);
             return new DefaultOidcUser(authorities, loaded.getIdToken(), loaded.getUserInfo(), nameKey);
         };
     }
 
     /** For providers that speak plain OAuth2 rather than OpenID Connect. */
-    static OAuth2UserService<OAuth2UserRequest, OAuth2User> plain(RolesLookupService roles) {
+    static OAuth2UserService<OAuth2UserRequest, OAuth2User> plain(RolesLookupService roles, boolean trustUnverifiedEmail) {
         DefaultOAuth2UserService delegate = new DefaultOAuth2UserService();
         return request -> {
             OAuth2User loaded = delegate.loadUser(request);
             String nameKey = request.getClientRegistration().getProviderDetails()
                     .getUserInfoEndpoint().getUserNameAttributeName();
             Set<GrantedAuthority> authorities = new LinkedHashSet<>(loaded.getAuthorities());
-            addRoles(authorities, roles, loaded.getName(), loaded.getAttributes().get("email"));
+            Map<String, Object> attributes = loaded.getAttributes();
+            Object email = trusted(attributes.get("email"), attributes.get("email_verified"), trustUnverifiedEmail);
+            addRoles(authorities, roles, loaded.getName(), email);
             return new DefaultOAuth2User(authorities, loaded.getAttributes(), nameKey);
         };
+    }
+
+    /**
+     * The e-mail address may only grant roles when the provider vouches for it. Some providers let users type in any
+     * address, which would let them claim the role of whoever is listed under that address.
+     */
+    static Object trusted(Object email, Object emailVerified, boolean trustUnverified) {
+        if (email == null) {
+            return null;
+        }
+        boolean verified = Boolean.TRUE.equals(emailVerified) || "true".equalsIgnoreCase(String.valueOf(emailVerified));
+        return verified || trustUnverified ? email : null;
     }
 
     /** Looks the user up by username and by e-mail, so either can be listed in the role configuration. */

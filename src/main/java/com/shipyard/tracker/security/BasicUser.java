@@ -13,7 +13,13 @@ public class BasicUser extends User {
     private final String email;
 
     public BasicUser(String username, String password, Collection<String> roles, String name, String email) {
-        super(username, password, roles.stream()
+        this(username, password, roles, name, email, true);
+    }
+
+    /** accountNonLocked=false makes Spring refuse the sign-in before the password is even checked. */
+    public BasicUser(String username, String password, Collection<String> roles, String name, String email,
+                     boolean accountNonLocked) {
+        super(username, password, true, true, true, accountNonLocked, roles.stream()
                 .map(role -> "ROLE_" + role.trim().toUpperCase(Locale.ROOT))
                 .map(SimpleGrantedAuthority::new)
                 .toList());

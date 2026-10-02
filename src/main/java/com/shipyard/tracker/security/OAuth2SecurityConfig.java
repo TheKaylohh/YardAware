@@ -16,7 +16,7 @@ import org.springframework.security.web.SecurityFilterChain;
  * (declare it with app.authz.oauth2.type=eldap, like the template does).
  */
 @Configuration
-@ConditionalOnProperty(name = "app.authn.type", havingValue = "oauth2")
+@ConditionalOnProperty(name = "app.authn.type", havingValue = "oauth2", matchIfMissing = true)
 @EnableConfigurationProperties(UserRolesProps.class)
 public class OAuth2SecurityConfig {
 
@@ -28,20 +28,22 @@ public class OAuth2SecurityConfig {
 
     @Bean
     @Order(1)
-    public SecurityFilterChain oauth2ApiChain(HttpSecurity http) throws Exception {
-        return SecuritySupport.apiChain(http, false);
+    public SecurityFilterChain oauth2ApiChain(HttpSecurity http, SecuritySettings settings) throws Exception {
+        return SecuritySupport.apiChain(http, false, settings);
     }
 
     @Bean
     @Order(2)
     public SecurityFilterChain oauth2WebChain(HttpSecurity http,
+                                              SecuritySettings settings,
                                               RolesLookupService roles,
                                               @Value("${app.authz.oauth2.username-claim:preferred_username}") String usernameClaim,
+                                              @Value("${app.authz.oauth2.trust-unverified-email:false}") boolean trustUnverifiedEmail,
                                               @Value("${spring.h2.console.path:/h2-console}") String h2Path) throws Exception {
-        SecuritySupport.configureWeb(http, h2Path);
+        SecuritySupport.configureWeb(http, h2Path, settings);
         http.oauth2Login(login -> login.userInfoEndpoint(info -> info
-                .oidcUserService(OAuth2RoleMapping.oidc(roles, usernameClaim))
-                .userService(OAuth2RoleMapping.plain(roles))));
+                .oidcUserService(OAuth2RoleMapping.oidc(roles, usernameClaim, trustUnverifiedEmail))
+                .userService(OAuth2RoleMapping.plain(roles, trustUnverifiedEmail))));
         return http.build();
     }
 }

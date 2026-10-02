@@ -15,7 +15,7 @@ public class MeController {
 
     private final String authMode;
 
-    public MeController(@Value("${app.authn.type:basic}") String authMode) {
+    public MeController(@Value("${app.authn.type:oauth2}") String authMode) {
         this.authMode = authMode;
     }
 

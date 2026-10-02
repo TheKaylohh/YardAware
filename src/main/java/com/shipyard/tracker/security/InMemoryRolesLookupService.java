@@ -27,6 +27,9 @@ public class InMemoryRolesLookupService implements RolesLookupService {
         if (listed(props.getEditor(), key)) {
             roles.add(AppRoles.EDITOR);
         }
+        if (listed(props.getViewer(), key)) {
+            roles.add(AppRoles.VIEWER);
+        }
         return roles;
     }
 

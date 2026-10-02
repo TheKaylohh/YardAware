@@ -28,7 +28,13 @@ public class AuthEntryController {
             target = candidate;
         }
         try {
-            return URI.create(target);
+            URI uri = URI.create(target);
+            // Belt and braces: whatever got through the checks above must still parse as a path on this site.
+            if (uri.getScheme() != null || uri.getRawAuthority() != null || uri.getRawPath() == null
+                    || !uri.getRawPath().startsWith("/") || target.length() > 2000) {
+                return URI.create("/");
+            }
+            return uri;
         } catch (IllegalArgumentException e) {
             return URI.create("/");
         }

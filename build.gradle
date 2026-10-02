@@ -1,6 +1,8 @@
 plugins {
     id 'java'
-    id 'org.springframework.boot' version '3.5.0'
+    // 3.5.16 is the last open-source 3.5 release; the 3.5 line reached end of OSS support on 2026-06-30.
+    // Plan the move to Spring Boot 4.x (see AUTH-README "Known limits" for the one code change in SecuritySupport).
+    id 'org.springframework.boot' version '3.5.16'
     id 'io.spring.dependency-management' version '1.1.7'
 }
 
@@ -22,11 +24,23 @@ dependencies {
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
-    runtimeOnly 'com.h2database:h2'
+    implementation 'org.flywaydb:flyway-core'
+    implementation 'org.flywaydb:flyway-database-postgresql'
+    runtimeOnly 'org.postgresql:postgresql'
+    runtimeOnly 'com.h2database:h2'   // local development and tests only; ProductionSafetyGuard blocks it elsewhere
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
+// Local runs and tests use the dev profile (test users, H2, demo data) unless you pick another one.
+// Production runs the jar: java -jar build/libs/yard-tracker-0.1.0.jar with SPRING_PROFILES_ACTIVE=prod
+def devProfile = System.getenv('SPRING_PROFILES_ACTIVE') ?: 'dev'
+
+tasks.named('bootRun') {
+    systemProperty 'spring.profiles.active', devProfile
+}
+
 tasks.named('test') {
     useJUnitPlatform()
+    systemProperty 'spring.profiles.active', devProfile
 }

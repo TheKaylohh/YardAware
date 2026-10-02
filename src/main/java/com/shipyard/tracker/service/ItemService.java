@@ -30,6 +30,7 @@ import java.util.Map;
 import java.util.Objects;
 import java.util.Set;
 import java.util.stream.Collectors;
+import java.util.regex.Pattern;
 import java.util.stream.Stream;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
@@ -42,6 +43,16 @@ public class ItemService {
 
     private static final int MAX_SPECS_LENGTH = 4000;
     private static final int MAX_NAME_LENGTH = 120;
+    private static final int MAX_NOTE_LENGTH = 500;
+    private static final int MAX_UNIT_LENGTH = 20;
+    private static final int MAX_ASSEMBLY_PARTS = 50;
+    private static final int MAX_SPEC_ENTRIES = 50;
+    private static final int MAX_SPEC_KEY_LENGTH = 80;
+    private static final int MAX_SPEC_VALUE_LENGTH = 500;
+    /** Activity.note column size. Generated notes ("Assembled from ...") are cut to fit instead of failing. */
+    private static final int ACTIVITY_NOTE_COLUMN = 1000;
+    /** Control characters and bidirectional overrides, which can disguise names and notes in the audit trail. */
+    private static final Pattern UNSAFE_TEXT = Pattern.compile("[\\p{Cc}\\u202A-\\u202E\\u2066-\\u2069]");
 
     private final ItemRepository items;
     private final HullRepository hulls;
@@ -124,7 +135,7 @@ public class ItemService {
         item.setUpdatedAt(now);
         items.save(item);
 
-        log(item, ActivityType.CREATED, null, zone, noteOr(req.note(), "Added to the yard log"));
+        log(item, ActivityType.CREATED, null, zone, noteOr(userNote(req.note()), "Added to the yard log"));
         return toDto(item);
     }
 
@@ -136,6 +147,7 @@ public class ItemService {
         if (req.name() != null && !req.name().isBlank() && !req.name().trim().equals(item.getName())) {
             String name = req.name().trim();
             checkNameLength(name);
+            checkText(name, "Names");
             ensureNameFree(name, item.getId());
             item.setName(name);
             changed.add("name");
@@ -175,7 +187,7 @@ public class ItemService {
         items.save(item);
 
         String note = "Changed " + String.join(", ", changed);
-        String extra = blankToNull(req.note());
+        String extra = userNote(req.note());
         log(item, ActivityType.EDITED, null, null, extra == null ? note : note + ". " + extra);
         return toDto(item);
     }
@@ -195,7 +207,7 @@ public class ItemService {
         item.setZone(to);
         item.setUpdatedAt(Instant.now());
         items.save(item);
-        log(item, ActivityType.MOVED, from, to, blankToNull(req.note()));
+        log(item, ActivityType.MOVED, from, to, userNote(req.note()));
         return toDto(item);
     }
 
@@ -215,6 +227,10 @@ public class ItemService {
         if (ids.size() < 2) {
             throw bad("Select at least two items to assemble.");
         }
+        if (ids.size() > MAX_ASSEMBLY_PARTS) {
+            throw bad("An assembly can have at most " + MAX_ASSEMBLY_PARTS + " parts at a time.");
+        }
+        String extra = userNote(req.note());
 
         List<Item> children = new ArrayList<>();
         for (Long id : ids) {
@@ -257,7 +273,6 @@ public class ItemService {
         items.save(parent);
 
         String childNames = children.stream().map(Item::getName).collect(Collectors.joining(", "));
-        String extra = blankToNull(req.note());
         String note = "Assembled from " + childNames;
         log(parent, ActivityType.ASSEMBLED, null, zone, extra == null ? note : note + ". " + extra);
 
@@ -323,6 +338,7 @@ public class ItemService {
             throw bad("Give the item a name.");
         }
         checkNameLength(name);
+        checkText(name, "Names");
         return name;
     }
 
@@ -348,6 +364,12 @@ public class ItemService {
             }
             item.setQuantity(quantity);
             String cleanUnit = blankToNull(unit);
+            if (cleanUnit != null) {
+                if (cleanUnit.length() > MAX_UNIT_LENGTH) {
+                    throw bad("Units can be at most " + MAX_UNIT_LENGTH + " characters.");
+                }
+                checkText(cleanUnit, "Units");
+            }
             item.setUnit(cleanUnit == null ? "pcs" : cleanUnit);
         } else {
             item.setQuantity(null);
@@ -362,13 +384,56 @@ public class ItemService {
         a.setFromZone(from);
         a.setToZone(to);
         a.setActor(users.currentUser());
-        a.setNote(note);
+        a.setNote(note != null && note.length() > ACTIVITY_NOTE_COLUMN
+                ? note.substring(0, ACTIVITY_NOTE_COLUMN - 3) + "..." : note);
         a.setOccurredAt(Instant.now());
         activities.save(a);
     }
 
     private static String blankToNull(String s) {
         return s == null || s.isBlank() ? null : s.trim();
+    }
+
+    /** A note typed by the user: optional, limited in length, no control characters. */
+    private static String userNote(String note) {
+        String clean = blankToNull(note);
+        if (clean == null) {
+            return null;
+        }
+        if (clean.length() > MAX_NOTE_LENGTH) {
+            throw bad("Notes can be at most " + MAX_NOTE_LENGTH + " characters.");
+        }
+        return checkText(clean, "Notes");
+    }
+
+    private static String checkText(String value, String label) {
+        if (value != null && UNSAFE_TEXT.matcher(value).find()) {
+            throw bad(label + " can't contain control or text-direction characters.");
+        }
+        return value;
+    }
+
+    /** Specs are a flat list of "name: value" pairs; values are text, numbers or true/false. */
+    private static void validateSpecs(Map<String, Object> specs) {
+        if (specs.size() > MAX_SPEC_ENTRIES) {
+            throw bad("An item can have at most " + MAX_SPEC_ENTRIES + " specs.");
+        }
+        for (Map.Entry<String, Object> entry : specs.entrySet()) {
+            String key = entry.getKey();
+            if (key == null || key.isBlank() || key.length() > MAX_SPEC_KEY_LENGTH) {
+                throw bad("Spec names must be 1 to " + MAX_SPEC_KEY_LENGTH + " characters.");
+            }
+            checkText(key, "Spec names");
+            Object value = entry.getValue();
+            if (value instanceof String text) {
+                if (text.length() > MAX_SPEC_VALUE_LENGTH) {
+                    throw bad("The spec " + key + " is longer than " + MAX_SPEC_VALUE_LENGTH + " characters.");
+                }
+                checkText(text, "Spec values");
+            } else if (value != null && !(value instanceof Number) && !(value instanceof Boolean)) {
+                throw bad("The spec " + key + " must be text, a number or true/false.");
+            }
+        }
     }
 
     private static String noteOr(String note, String fallback) {
@@ -380,6 +445,7 @@ public class ItemService {
         if (specs == null || specs.isEmpty()) {
             return null;
         }
+        validateSpecs(specs);
         try {
             String json = mapper.writeValueAsString(specs);
             if (json.length() > MAX_SPECS_LENGTH) {

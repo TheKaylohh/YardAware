@@ -7,12 +7,19 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
 import java.time.Instant;
+import org.hibernate.annotations.Immutable;
 
-/** One line in an item's history. Append-only: entries are never edited or removed. */
+/**
+ * One line in an item's history. Append-only: entries are never edited or removed.
+ * Enforced three ways: no setters are used after insert, Hibernate treats the entity as read-only once saved
+ * (@Immutable), and in production a database trigger rejects UPDATE/DELETE (db/migration/V2).
+ */
 @Entity
+@Immutable
 @Table(name = "activities")
 public class Activity {
 
@@ -21,24 +28,28 @@ public class Activity {
     private Long id;
 
     @ManyToOne(optional = false)
+    @JoinColumn(updatable = false)
     private Item item;
 
     @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private ActivityType type;
 
     @ManyToOne
+    @JoinColumn(updatable = false)
     private Zone fromZone;
 
     @ManyToOne
+    @JoinColumn(updatable = false)
     private Zone toZone;
 
+    @Column(updatable = false)
     private String actor;
 
-    @Column(length = 1000)
+    @Column(length = 1000, updatable = false)
     private String note;
 
-    @Column(nullable = false)
+    @Column(nullable = false, updatable = false)
     private Instant occurredAt;
 
     public Long getId() { return id; }

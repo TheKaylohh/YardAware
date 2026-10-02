@@ -1,0 +1,14 @@
+# Weekly pull requests for outdated or vulnerable dependencies.
+version: 2
+updates:
+  - package-ecosystem: gradle
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      spring:
+        patterns: ["org.springframework*"]
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly

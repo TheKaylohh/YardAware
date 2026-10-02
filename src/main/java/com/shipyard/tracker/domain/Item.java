@@ -9,7 +9,9 @@ import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.Version;
 import java.time.Instant;
+import org.hibernate.annotations.ColumnDefault;
 
 /**
  * Anything tracked on the yard: a piece of a ship, a batch of pipes, or a large tool.
@@ -61,6 +63,16 @@ public class Item {
     private Instant createdAt;
     private Instant updatedAt;
 
+    /**
+     * Optimistic lock. If two people change the same item at once (or assemble the same piece into two parents),
+     * the second save fails with a conflict instead of silently overwriting the first.
+     * The default lets ddl-auto=update add the column to an existing dev database.
+     */
+    @Version
+    @ColumnDefault("0")
+    @Column(nullable = false)
+    private long version;
+
     public Long getId() { return id; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
@@ -86,4 +98,5 @@ public class Item {
     public void setCreatedAt(Instant createdAt) { this.createdAt = createdAt; }
     public Instant getUpdatedAt() { return updatedAt; }
     public void setUpdatedAt(Instant updatedAt) { this.updatedAt = updatedAt; }
+    public long getVersion() { return version; }
 }
