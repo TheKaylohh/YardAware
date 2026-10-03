@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Admin · Yard Tracker</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/nav.css">
+  <link rel="stylesheet" href="/css/pages.css">
+</head>
+<body data-page="admin">
+  <div class="page">
+    <div class="wrap">
+      <h1>Admin</h1>
+      <p class="lede">Decide who can look at, change or administer the yard, add ships, and see what administrators did.</p>
+
+      <div id="denied" class="banner banner-warn" hidden>Only administrators can use this page.</div>
+
+      <div id="content" hidden>
+        <div id="mode-note" class="banner banner-info" hidden></div>
+
+        <section class="card" aria-labelledby="people-h">
+          <div class="section-head">
+            <h2 id="people-h">People and access</h2>
+            <input id="people-filter" type="search" placeholder="Find a person" aria-label="Find a person" autocomplete="off" hidden>
+          </div>
+          <p class="sub" style="margin:-6px 0 12px">
+            People appear here the first time they sign in. You can also add someone in advance by e-mail address.
+            A change takes effect on the person's next click; they do not need to sign in again.
+          </p>
+          <div class="tbl-wrap">
+            <table class="tbl" id="people">
+              <thead>
+                <tr><th>Person</th><th>Access</th><th>Status</th><th>Last sign-in</th><th><span class="visually-hidden">Actions</span></th></tr>
+              </thead>
+              <tbody id="people-body"></tbody>
+            </table>
+          </div>
+          <form id="add-person" class="inline-form" autocomplete="off">
+            <label class="field field-grow"><span class="field-label">Add a person</span>
+              <input id="add-id" type="text" maxlength="255" placeholder="name@company.com or user id" required>
+            </label>
+            <label class="field"><span class="field-label">Access</span>
+              <select id="add-role">
+                <option value="VIEWER">Viewer</option>
+                <option value="EDITOR">Editor</option>
+                <option value="ADMIN">Admin</option>
+              </select>
+            </label>
+            <button class="btn btn-primary" type="submit" id="add-btn">Add</button>
+          </form>
+          <p class="msg msg-error" id="people-error" role="alert" hidden></p>
+          <details class="roles-help">
+            <summary>What the access levels mean</summary>
+            <ul>
+              <li><strong>Viewer</strong>: can look at the map and the data, and export to Excel.</li>
+              <li><strong>Editor</strong>: can also move items, change phases and specs, edit in the Data sheet and import from Excel.</li>
+              <li><strong>Admin</strong>: can also use this page: manage people and add ships.</li>
+              <li><strong>No access</strong>: can sign in but cannot see the yard. Disabling someone has the same effect and keeps their record.</li>
+              <li><strong>From configuration</strong>: a role set on the server (the YARD_ADMINS style settings) is always kept. An administrator named there can never be locked out from this page.</li>
+            </ul>
+          </details>
+        </section>
+
+        <div class="grid2">
+          <section class="card" aria-labelledby="ships-h">
+            <h2 id="ships-h">Ships</h2>
+            <div class="tbl-wrap">
+              <table class="tbl">
+                <thead><tr><th>Code</th><th>Name</th><th class="num">Items</th></tr></thead>
+                <tbody id="ships-body"></tbody>
+              </table>
+            </div>
+            <form id="add-ship" class="inline-form" autocomplete="off">
+              <label class="field"><span class="field-label">Code</span>
+                <input id="ship-code" type="text" maxlength="20" placeholder="S044" required pattern="[A-Za-z0-9][A-Za-z0-9\-]{1,19}" title="2 to 20 letters, digits or dashes">
+              </label>
+              <label class="field field-grow"><span class="field-label">Name</span>
+                <input id="ship-name" type="text" maxlength="100" placeholder="Hull S044" required>
+              </label>
+              <label class="field field-color"><span class="field-label">Colour</span>
+                <input id="ship-color" type="color" value="#2d6cdf">
+              </label>
+              <button class="btn btn-primary" type="submit" id="ship-btn">Add ship</button>
+            </form>
+            <p class="msg msg-error" id="ship-error" role="alert" hidden></p>
+            <p class="sub">A new ship has no items yet. Items are added with the planning import that loads the hierarchy.</p>
+          </section>
+
+          <section class="card" aria-labelledby="log-h">
+            <h2 id="log-h">What administrators did</h2>
+            <ul class="feed" id="log"></ul>
+          </section>
+        </div>
+
+        <section class="card" style="margin-top:16px" aria-labelledby="sys-h">
+          <h2 id="sys-h">System</h2>
+          <dl class="kv" id="system"></dl>
+          <p class="sub"><a href="/actuator/health" target="_blank" rel="noopener">Health check</a> (up or down, no details).</p>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+  <script type="module" src="/js/nav.js"></script>
+  <script type="module" src="/js/admin.js"></script>
+</body>
+</html>

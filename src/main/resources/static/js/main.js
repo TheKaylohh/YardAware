@@ -31,6 +31,17 @@ async function boot() {
   buildFilters();
   renderZones();
   renderItems();
+  openFromLink();
+}
+
+/** /map.html?q=S041-BA-U01 (links from the home and data pages) searches for that item and jumps to it. */
+function openFromLink() {
+  const q = new URLSearchParams(window.location.search).get('q');
+  if (!q) return;
+  $('search').value = q;
+  state.query = q;
+  const hits = applySearch();
+  if (hits.length) focusItem(hits[0]);
 }
 
 async function reload() {
@@ -61,7 +72,7 @@ function roleLabel(me) {
 /** Show who is signed in, and only offer Edit to people who can use it. The server enforces this either way. */
 function applyUser(me) {
   state.user = me;
-  if (me.authenticated) {
+  if (me.authenticated && $('user')) {
     $('user-name').textContent = me.name || me.username;
     $('user-name').title = me.email || '';
     $('user-role').textContent = roleLabel(me);
@@ -121,7 +132,7 @@ function wireTopBar() {
     searchCursor += 1;
   });
 
-  $('btn-signout').addEventListener('click', signOut);
+  if ($('btn-signout')) $('btn-signout').addEventListener('click', signOut);
   $('btn-add').addEventListener('click', openPlaceItem);
   $('btn-assemble').addEventListener('click', () => (state.assembling ? endAssemble() : startAssemble()));
   $('assemble-cancel').addEventListener('click', endAssemble);

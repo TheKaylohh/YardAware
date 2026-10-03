@@ -1,0 +1,73 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Import · Yard Tracker</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/nav.css">
+  <link rel="stylesheet" href="/css/pages.css">
+</head>
+<body data-page="import">
+  <div class="page">
+    <div class="wrap wrap-narrow">
+      <h1>Import from Excel</h1>
+      <p class="lede">Update where items are, which phase they are in and their specs from an Excel file.
+        Nothing is saved until you have seen every change and every problem, and pressed Apply.</p>
+
+      <ol class="steps" aria-label="Steps">
+        <li><strong>Get the sheet.</strong> <a href="/api/export/items.xlsx" download>Export the current items</a>, or use a sheet you made the same way. Edit the yellow columns: Zone, Phase, Specs.</li>
+        <li><strong>Check it.</strong> Choose the file below. The page lists what would change and which rows have problems. Nothing is saved yet.</li>
+        <li><strong>Apply it.</strong> If it looks right, apply. Every change is added to the item's history with the file name.</li>
+      </ol>
+
+      <div id="denied" class="banner banner-warn" hidden>Your account can look at the yard but not change it, so importing is switched off.
+        Ask an administrator for editor access.</div>
+
+      <section id="step-pick" class="drop" aria-label="Choose a file">
+        <strong>Drop an .xlsx file here</strong>
+        <span>or</span>
+        <label class="btn btn-primary" for="file">Choose a file</label>
+        <input type="file" id="file" accept=".xlsx,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" class="visually-hidden">
+        <span class="sub">Excel Workbook (.xlsx), up to 2 MB. Older .xls and .csv files must be saved as .xlsx first.</span>
+      </section>
+
+      <section id="step-result" hidden aria-live="polite">
+        <div class="filebar">
+          <div><strong id="file-name"></strong> <span class="sub" id="file-size"></span></div>
+          <button class="btn btn-small" id="btn-other" type="button">Choose another file</button>
+        </div>
+        <div id="busy" class="banner banner-info" hidden>Reading the file…</div>
+        <div id="fail" class="banner banner-warn" hidden></div>
+        <div id="done" class="banner banner-ok" hidden></div>
+        <div id="report"></div>
+
+        <div class="applybar" id="applybar" hidden>
+          <label id="skip-wrap" hidden><input type="checkbox" id="skip"> Skip the rows with problems and apply the rest</label>
+          <span class="grow"></span>
+          <button class="btn btn-primary" id="btn-apply" type="button" disabled>Apply changes</button>
+        </div>
+      </section>
+
+      <details class="card" style="margin-top:22px">
+        <summary><strong>What the columns mean</strong></summary>
+        <table class="tbl" style="margin-top:10px">
+          <tbody>
+            <tr><th scope="row">Name</th><td>Identifies the item. Do not change it. A name that is not in the system is reported as a problem; this page never creates items.</td></tr>
+            <tr><th scope="row">Zone</th><td>A zone code or name. An item that is still planned and gets a zone is placed on the yard. An item already on the yard is moved. Leave blank to keep it where it is.</td></tr>
+            <tr><th scope="row">Phase</th><td>A phase number from the item's own route. Only items on the yard can change phase. Leave blank to keep it.</td></tr>
+            <tr><th scope="row">Specs</th><td>A JSON object like <code>{"Weight (t)": 92.5}</code>. Write <code>{}</code> to clear all specs. Leave blank to keep them.</td></tr>
+            <tr><th scope="row">Version</th><td>Leave it alone. If someone changed the item after the sheet was exported, that row is refused instead of overwriting their work.</td></tr>
+            <tr><th scope="row">Other columns</th><td>Hull, Level, Area, Parent, Status and the rest are for reading and are ignored on import.</td></tr>
+          </tbody>
+        </table>
+      </details>
+    </div>
+  </div>
+
+  <div id="toasts" aria-live="polite"></div>
+  <script type="module" src="/js/nav.js"></script>
+  <script type="module" src="/js/import.js"></script>
+</body>
+</html>

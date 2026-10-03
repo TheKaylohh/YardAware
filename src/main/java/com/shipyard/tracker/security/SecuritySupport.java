@@ -2,6 +2,7 @@ package com.shipyard.tracker.security;
 
 import static org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher;
 
+import jakarta.servlet.Filter;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
@@ -11,6 +12,7 @@ import org.springframework.security.web.SecurityFilterChain;
 import org.springframework.security.web.authentication.HttpStatusEntryPoint;
 import org.springframework.security.web.authentication.logout.HttpStatusReturningLogoutSuccessHandler;
 import org.springframework.security.web.authentication.www.BasicAuthenticationFilter;
+import org.springframework.security.web.context.SecurityContextHolderFilter;
 import org.springframework.security.web.csrf.CookieCsrfTokenRepository;
 import org.springframework.security.web.csrf.CsrfTokenRequestAttributeHandler;
 import org.springframework.security.web.header.writers.ContentSecurityPolicyHeaderWriter;
@@ -40,6 +42,12 @@ final class SecuritySupport {
     }
 
     static SecurityFilterChain apiChain(HttpSecurity http, boolean allowHttpBasic, SecuritySettings settings) throws Exception {
+        return apiChain(http, allowHttpBasic, settings, null);
+    }
+
+    /** {@code roleRefresh} (may be null) re-reads the person's roles on every request; see RoleRefreshFilter. */
+    static SecurityFilterChain apiChain(HttpSecurity http, boolean allowHttpBasic, SecuritySettings settings,
+                                        Filter roleRefresh) throws Exception {
         // Requests that carry an Authorization: Basic header can't be forged by another website, so they skip CSRF.
         RequestMatcher basicHeader = request -> {
             String header = request.getHeader("Authorization");
@@ -48,6 +56,8 @@ final class SecuritySupport {
 
         http.securityMatcher(antMatcher("/api/**"))
                 .authorizeHttpRequests(auth -> {
+                    // The Admin page's API: administrators only, for reading as well as writing.
+                    auth.requestMatchers(antMatcher("/api/admin/**")).hasRole(AppRoles.ADMIN);
                     readAccess(auth.requestMatchers(antMatcher(HttpMethod.GET, "/api/**"), antMatcher(HttpMethod.HEAD, "/api/**")), settings);
                     // Creating a ship generates hundreds of records, so it is not an everyday editor action.
                     auth.requestMatchers(antMatcher(HttpMethod.POST, "/api/hulls")).hasRole(AppRoles.ADMIN);
@@ -63,6 +73,9 @@ final class SecuritySupport {
                 .headers(headers -> commonHeaders(headers))
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class)
                 .exceptionHandling(ex -> ex.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
+        if (roleRefresh != null) {
+            http.addFilterAfter(roleRefresh, SecurityContextHolderFilter.class);
+        }
         if (allowHttpBasic) {
             // Handy for curl and tests. No WWW-Authenticate challenge, so browsers never pop up a native login box.
             http.httpBasic(basic -> basic.authenticationEntryPoint(new HttpStatusEntryPoint(HttpStatus.UNAUTHORIZED)));
@@ -72,6 +85,11 @@ final class SecuritySupport {
 
     /** Common settings for the web chain. The caller adds the login mechanism (form login or OAuth2). */
     static void configureWeb(HttpSecurity http, String h2ConsolePath, SecuritySettings settings) throws Exception {
+        configureWeb(http, h2ConsolePath, settings, null);
+    }
+
+    static void configureWeb(HttpSecurity http, String h2ConsolePath, SecuritySettings settings, Filter roleRefresh)
+            throws Exception {
         RequestMatcher h2Console = antMatcher(h2ConsolePath + "/**");
         RequestMatcher notH2Console = new NegatedRequestMatcher(h2Console);
         http.authorizeHttpRequests(auth -> {
@@ -80,6 +98,9 @@ final class SecuritySupport {
                     // Health probes for the load balancer / orchestrator. Only status is exposed (no details).
                     auth.requestMatchers(antMatcher("/actuator/health"), antMatcher("/actuator/health/**")).permitAll();
                     auth.requestMatchers(h2Console).hasRole(AppRoles.ADMIN);
+                    // Pages that only make sense with more than read access (the APIs behind them enforce it as well).
+                    auth.requestMatchers(antMatcher("/admin.html")).hasRole(AppRoles.ADMIN);
+                    auth.requestMatchers(antMatcher("/import.html")).hasAnyRole(AppRoles.EDITOR, AppRoles.ADMIN);
                     readAccess(auth.anyRequest(), settings);
                 })
                 .csrf(csrf -> {
@@ -106,6 +127,9 @@ final class SecuritySupport {
                 })
                 .logout(logout -> logout.logoutSuccessHandler(new HttpStatusReturningLogoutSuccessHandler()))
                 .addFilterAfter(new CsrfCookieFilter(), BasicAuthenticationFilter.class);
+        if (roleRefresh != null) {
+            http.addFilterAfter(roleRefresh, SecurityContextHolderFilter.class);
+        }
     }
 
     private static void readAccess(AuthorizeHttpRequestsConfigurer<HttpSecurity>.AuthorizedUrl url, SecuritySettings settings) {

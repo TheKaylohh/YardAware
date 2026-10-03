@@ -63,13 +63,26 @@ Register this redirect URI at the identity provider: `http://localhost:8080/logi
 
 To use the eLDAP role lookup from the template, copy `ELdapRoleLookupService`, change it to implement
 `com.shipyard.tracker.security.RolesLookupService`, and declare it as a bean with `app.authz.oauth2.type=eldap`.
-Roles are read at sign-in, so a role change takes effect at the next login.
+Roles listed in the configuration are always granted. Administrators can add roles on top of them on the Admin page (stored in the database).
+Both are re-read on every request (cached for a few seconds), so a change takes effect on the person's next click, without signing in again.
+Changing the configuration itself still needs a restart.
+
+#### Roles on the Admin page
+
+- A row in `app_users` is created the first time someone signs in (no role: they see nothing until an admin grants one), or by an admin in advance (by e-mail address or user id).
+  An e-mail address added in advance is matched at sign-in only when the identity provider marks the address as verified (`app.authz.oauth2.trust-unverified-email=false` by default).
+- Roles from the configuration (`YARD_ADMINS` and friends) are always kept: they are the break-glass accounts. A person named there cannot be locked out by disabling them on the page.
+- *Disabled* gives the person no access at all, even when the configuration lists them as a viewer or editor. Only people listed as administrators in the configuration are exempt.
+- Nobody can change or remove their own record, so the last administrator cannot be locked out by accident.
+- Every change is written to `admin_events`, which the database refuses to update or delete (PostgreSQL), and to the `SECURITY_AUDIT` log.
+- In `basic` and `none` modes the Admin page can be used, but the roles come from `application-dev.properties` (the page says so).
 
 ## What is protected
 
 - Everything on the site needs a signed-in user with the VIEWER, EDITOR or ADMIN role.
 - `GET /api/**` needs VIEWER, EDITOR or ADMIN. Every other `/api/**` call needs the EDITOR or ADMIN role.
-  `POST /api/hulls` (create a ship) needs ADMIN. This is enforced on the server; hiding the Edit toggle is only a convenience.
+  `POST /api/hulls` (create a ship) and everything under `/api/admin/**` (reading too) need ADMIN.
+  The pages follow suit: `/import.html` needs EDITOR or ADMIN and `/admin.html` needs ADMIN. This is enforced on the server; hiding menu items and buttons is only a convenience.
 - `/actuator/health` is public (status only) for load-balancer probes.
 - The API answers 401 (not a redirect), and the frontend sends the browser to sign in.
 - Writes carry a CSRF token (cookie `XSRF-TOKEN`, header `X-XSRF-TOKEN`).
@@ -99,12 +112,14 @@ Make sure Apache sets them (and strips any the client sent), and that port 8080 
 
 `./gradlew test`. New: `SecurityIntegrationTest` (401, viewer vs editor vs admin, `/api/me`),
 `AuthEntryControllerTest` (redirect safety). `ApiSmokeTest` now signs in as the editor.
+`PagesApiTest` covers the Home, Data, Import and Admin endpoints, `UserDirectoryTest` the role rules, and `ProductionPathIntegrationTest` (Docker) the database-managed roles on PostgreSQL.
 
 ## Known limits
 
 - Demo passwords are for local testing only; the app won't start with them outside the dev profile.
 - Sign out ends the app session only; with single sign-on you may be signed straight back in.
 - Sessions live in memory, so a restart signs everyone out.
+- A person who is signed in keeps their session until it expires or they sign out, but roles are looked up on every request, so withdrawing or disabling their access takes effect at once.
 - Built for Spring Boot 3.5 (the POC's version). Moving to Boot 4 / Spring Security 7: replace
   `AntPathRequestMatcher.antMatcher(...)` in `SecuritySupport` with `PathPatternRequestMatcher.pathPattern(...)`,
   as your template does.

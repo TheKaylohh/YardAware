@@ -25,7 +25,9 @@ function redirectToSignIn() {
 
 async function request(method, path, body) {
   const headers = {};
-  if (body !== undefined) headers['Content-Type'] = 'application/json';
+  // FormData (file uploads) must go out as-is so the browser can set the multipart boundary itself.
+  const isForm = typeof FormData !== 'undefined' && body instanceof FormData;
+  if (body !== undefined && !isForm) headers['Content-Type'] = 'application/json';
   if (method !== 'GET') {
     const token = csrfToken();
     if (token) headers['X-XSRF-TOKEN'] = token;
@@ -34,7 +36,7 @@ async function request(method, path, body) {
     method,
     headers,
     credentials: 'same-origin',
-    body: body === undefined ? undefined : JSON.stringify(body),
+    body: body === undefined ? undefined : (isForm ? body : JSON.stringify(body)),
   });
 
   if (res.status === 401) {
@@ -61,4 +63,5 @@ export const api = {
   get: (path) => request('GET', path),
   post: (path, body = {}) => request('POST', path, body),
   put: (path, body = {}) => request('PUT', path, body),
+  del: (path) => request('DELETE', path),
 };

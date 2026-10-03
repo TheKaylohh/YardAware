@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Data · Yard Tracker</title>
+  <link rel="icon" href="data:,">
+  <link rel="stylesheet" href="/css/app.css">
+  <link rel="stylesheet" href="/css/nav.css">
+  <link rel="stylesheet" href="/css/pages.css">
+</head>
+<body data-page="data">
+  <div class="page page-flush">
+    <div class="gridpage">
+      <div class="toolbar">
+        <h1>Data</h1>
+        <input id="q" type="search" placeholder="Search everything" aria-label="Search all columns" autocomplete="off">
+        <select id="f-hull" aria-label="Ship"><option value="">All ships</option></select>
+        <select id="f-status" aria-label="Status">
+          <option value="">All statuses</option>
+          <option value="PLANNED">Planned</option>
+          <option value="ACTIVE">On the yard</option>
+          <option value="CONSUMED">Joined into parent</option>
+        </select>
+        <label><input type="checkbox" id="f-changed"> Changed only</label>
+        <span class="grow"></span>
+        <span id="count" class="muted" aria-live="polite"></span>
+        <a class="btn" id="btn-export" href="/api/export/items.xlsx" download>Export Excel</a>
+        <a class="btn" id="btn-import" href="/import.html" hidden>Import Excel</a>
+      </div>
+
+      <div id="ro-note" class="banner banner-info" hidden>You have read-only access. You can search, sort, copy and export, but not change items.</div>
+
+      <div class="grid" id="grid" role="grid" aria-label="All tracked items" aria-describedby="grid-help">
+        <div class="g-head" id="g-head" role="row"></div>
+        <div class="g-filters" id="g-filters" role="row"></div>
+        <div class="g-body" id="g-body">
+          <div id="g-rows"></div>
+          <input class="g-editor" id="g-editor" type="text" hidden aria-label="Edit cell" autocomplete="off" spellcheck="false">
+        </div>
+      </div>
+      <textarea class="g-clip" id="g-clip" aria-hidden="true" tabindex="-1"></textarea>
+      <datalist id="zone-list"></datalist>
+
+      <div class="savebar" id="savebar" hidden>
+        <span class="grow" id="dirty-msg"></span>
+        <button class="btn" id="btn-discard" type="button">Discard changes</button>
+        <button class="btn" id="btn-check" type="button">Check</button>
+        <button class="btn btn-save" id="btn-save" type="button">Save changes</button>
+      </div>
+
+      <p class="help" id="grid-help">
+        Click a cell, then type to replace it, <kbd>Enter</kbd> or <kbd>F2</kbd> to edit, <kbd>Delete</kbd> to undo a cell,
+        <kbd>Ctrl</kbd>+<kbd>C</kbd>/<kbd>V</kbd> to copy and paste blocks (also from Excel), <kbd>Ctrl</kbd>+<kbd>D</kbd> to fill down,
+        <kbd>Ctrl</kbd>+<kbd>Z</kbd> to undo. Yellow headers are editable. Specs are a JSON object; write <code>{}</code> to clear them.
+      </p>
+    </div>
+  </div>
+
+  <dialog id="report-dialog" class="wide"></dialog>
+  <div id="toasts" aria-live="polite"></div>
+  <script type="module" src="/js/nav.js"></script>
+  <script type="module" src="/js/grid.js"></script>
+</body>
+</html>
