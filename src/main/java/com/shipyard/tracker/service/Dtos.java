@@ -117,6 +117,10 @@ public final class Dtos {
 
     // ---- requests ----
 
+    /** Admin only: a new ship. The server creates its planned items from the hierarchy. */
+    public record CreateHullRequest(String code, String name, String color) {
+    }
+
     /** Put a PLANNED item on the yard for the first time. */
     public record PlaceRequest(Long zoneId, String note) {
     }

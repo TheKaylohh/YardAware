@@ -49,6 +49,8 @@ final class SecuritySupport {
         http.securityMatcher(antMatcher("/api/**"))
                 .authorizeHttpRequests(auth -> {
                     readAccess(auth.requestMatchers(antMatcher(HttpMethod.GET, "/api/**"), antMatcher(HttpMethod.HEAD, "/api/**")), settings);
+                    // Creating a ship generates hundreds of records, so it is not an everyday editor action.
+                    auth.requestMatchers(antMatcher(HttpMethod.POST, "/api/hulls")).hasRole(AppRoles.ADMIN);
                     auth.anyRequest().hasAnyRole(AppRoles.EDITOR, AppRoles.ADMIN);
                 })
                 .csrf(csrf -> {
@@ -75,6 +77,8 @@ final class SecuritySupport {
         http.authorizeHttpRequests(auth -> {
                     // Error pages must stay reachable or Spring Security hides the real error behind a login redirect.
                     auth.requestMatchers(antMatcher("/error")).permitAll();
+                    // Health probes for the load balancer / orchestrator. Only status is exposed (no details).
+                    auth.requestMatchers(antMatcher("/actuator/health"), antMatcher("/actuator/health/**")).permitAll();
                     auth.requestMatchers(h2Console).hasRole(AppRoles.ADMIN);
                     readAccess(auth.anyRequest(), settings);
                 })

@@ -1,6 +1,7 @@
 package com.shipyard.tracker.security;
 
 import java.util.ArrayList;
+import java.util.Arrays;
 import java.util.List;
 import java.util.Locale;
 import org.slf4j.Logger;
@@ -19,6 +20,10 @@ public class ProductionSafetyGuard {
 
     public ProductionSafetyGuard(Environment env) {
         boolean devMode = env.getProperty("app.security.dev-mode", Boolean.class, false);
+        if (devMode && Arrays.asList(env.getActiveProfiles()).contains("prod")) {
+            throw new IllegalStateException("app.security.dev-mode=true cannot be combined with the prod profile. "
+                    + "Something is switching development settings on in a production run.");
+        }
         List<String> problems = problems(env);
         if (problems.isEmpty()) {
             return;

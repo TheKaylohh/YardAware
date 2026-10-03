@@ -19,4 +19,7 @@ jobs:
           distribution: temurin
           java-version: '21'
       - uses: gradle/actions/setup-gradle@v4
-      - run: chmod +x gradlew && ./gradlew test --no-daemon
+      # ubuntu-latest has Docker, so ProductionPathIntegrationTest runs here against a real PostgreSQL.
+      - run: chmod +x gradlew && ./gradlew test bootJar --no-daemon
+      - name: Container image builds
+        run: docker build -t yard-tracker:ci .

@@ -13,9 +13,8 @@ You need Java 21. Gradle is not required; the wrapper downloads it on first use.
 ./gradlew bootRun        # Windows: gradlew.bat bootRun   (uses the dev profile automatically)
 ```
 
-Production: build with `./gradlew bootJar`, run the jar with `SPRING_PROFILES_ACTIVE=prod` and the environment
-variables listed in `application-prod.properties` (PostgreSQL, identity provider, role lists).
-The app refuses to start outside the dev profile if a development-only setting is still on.
+Production: see `docs/DEPLOY.md` (PostgreSQL, identity provider, first start, backups, go-live checklist). A `Dockerfile` is included.
+The app refuses to start outside the dev profile if a development-only setting is still on, and refuses dev mode together with the prod profile.
 
 Open http://localhost:8080 and sign in (see below).
 
@@ -25,9 +24,10 @@ Details, OAuth2 setup and the Apache proxy lines are in `AUTH-README.md`.
 The first start creates `./data/yard` and fills it with demo data (3 hulls, 13 zones, about 24 items).
 To start over with fresh demo data, stop the app and delete the `data` folder.
 To start with an empty database, set `shipyard.seed-demo-data=false` in `application.properties`
-(you will need to add hulls and zones yourself; there is no screen for that yet).
+(the zones and the plan load anyway; an admin then creates ships with `POST /api/hulls`, see `docs/DEPLOY.md`; there is no screen for that yet).
 
-Run the tests with `./gradlew test`. They use an in-memory database and never touch `./data`.
+Run the tests with `./gradlew test`. Most use an in-memory database and never touch `./data`. `ProductionPathIntegrationTest` starts a real PostgreSQL in Docker
+(Flyway, schema validation, OAuth2 wiring, append-only audit trail) and is skipped when Docker is not available.
 
 If the wrapper fails to start, install Gradle once and run `gradle wrapper`, or open the folder in IntelliJ IDEA,
 which imports the Gradle build directly.
@@ -88,6 +88,8 @@ tools/make_map.py   regenerates yard.svg
 | POST | /api/items | create |
 | PUT | /api/items/{id} | edit name, hull, tag, quantity, specs |
 | POST | /api/items/{id}/move | move to a zone `{zoneId, note}` |
+| POST | /api/hulls | **admin only**: create a ship and its planned items `{code, name, color}` |
+| GET | /actuator/health | health probe (public, status only) |
 | POST | /api/items/assemble | `{childIds, name, type, tag, zoneId, specs, note}` |
 
 Errors are returned as JSON with a readable `message`.

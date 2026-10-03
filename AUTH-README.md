@@ -28,7 +28,7 @@ Outside the dev profile the app refuses to start in basic or none mode (see `Pro
 | editor | editor123 | Everything above, plus Edit mode (move, add, assemble, edit). |
 | admin | admin123 | Same as editor, plus the H2 console. |
 
-The Activity tab now shows the real username instead of `demo.user`.
+The Activity tab now shows who did it: the person's name plus their sign-in id, e.g. `Eddie Editor (editor)`.
 Change users in `application-dev.properties`.
 
 ## Modes (`app.authn.type` in application.properties)
@@ -69,7 +69,8 @@ Roles are read at sign-in, so a role change takes effect at the next login.
 
 - Everything on the site needs a signed-in user with the VIEWER, EDITOR or ADMIN role.
 - `GET /api/**` needs VIEWER, EDITOR or ADMIN. Every other `/api/**` call needs the EDITOR or ADMIN role.
-  This is enforced on the server; hiding the Edit toggle is only a convenience.
+  `POST /api/hulls` (create a ship) needs ADMIN. This is enforced on the server; hiding the Edit toggle is only a convenience.
+- `/actuator/health` is public (status only) for load-balancer probes.
 - The API answers 401 (not a redirect), and the frontend sends the browser to sign in.
 - Writes carry a CSRF token (cookie `XSRF-TOKEN`, header `X-XSRF-TOKEN`).
   Requests with an `Authorization: Basic` header (curl, tests; basic mode only) skip it.

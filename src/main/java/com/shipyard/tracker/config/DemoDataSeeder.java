@@ -16,7 +16,7 @@ import com.shipyard.tracker.repo.HullRepository;
 import com.shipyard.tracker.repo.ItemRepository;
 import com.shipyard.tracker.repo.PhaseRepository;
 import com.shipyard.tracker.repo.ZoneRepository;
-import com.shipyard.tracker.service.ItemService;
+import com.shipyard.tracker.service.HullService;
 import java.io.IOException;
 import java.io.InputStream;
 import java.time.Duration;
@@ -70,6 +70,7 @@ public class DemoDataSeeder implements ApplicationRunner {
     record StateFile(List<HullRow> hulls, List<ItemRow> items) {
     }
 
+    private final HullService hullService;
     private final HullRepository hulls;
     private final ZoneRepository zones;
     private final ItemRepository items;
@@ -81,7 +82,8 @@ public class DemoDataSeeder implements ApplicationRunner {
     private final boolean enabled;
     private final boolean placeDemoItems;
 
-    public DemoDataSeeder(HullRepository hulls,
+    public DemoDataSeeder(HullService hullService,
+                          HullRepository hulls,
                           ZoneRepository zones,
                           ItemRepository items,
                           HierarchyNodeRepository nodes,
@@ -91,6 +93,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                           ObjectMapper mapper,
                           @Value("${shipyard.seed-demo-data:true}") boolean enabled,
                           @Value("${shipyard.seed-demo-placement:true}") boolean placeDemoItems) {
+        this.hullService = hullService;
         this.hulls = hulls;
         this.zones = zones;
         this.items = items;
@@ -122,49 +125,24 @@ public class DemoDataSeeder implements ApplicationRunner {
     private void seed(List<ZoneRow> zoneRows, StateFile state) {
         Map<String, Zone> zoneByCode = new HashMap<>();
         for (ZoneRow z : zoneRows) {
-            zoneByCode.put(z.code(), zones.save(new Zone(z.code(), z.name(), z.kind(), z.points(), z.facility())));
+            // ZoneLoader normally created them already; only add what is missing.
+            zoneByCode.put(z.code(), zones.findByCode(z.code())
+                    .orElseGet(() -> zones.save(new Zone(z.code(), z.name(), z.kind(), z.points(), z.facility()))));
         }
 
-        List<HierarchyNode> tracked = nodes.findByLevelInOrderBySortOrder(
-                Arrays.stream(NodeLevel.values()).filter(NodeLevel::isTracked).toList());
         Instant now = Instant.now();
         Map<String, Item> itemByName = new HashMap<>();
         for (HullRow row : state.hulls()) {
             Hull hull = hulls.save(new Hull(row.code(), row.name(), row.color()));
-            plan(hull, tracked, now.minus(Duration.ofDays(row.ageDays())), itemByName);
+            for (Item item : hullService.planItems(hull, now.minus(Duration.ofDays(row.ageDays())), "seed",
+                    "Planned from the Aloha class hierarchy")) {
+                itemByName.put(item.getName(), item);
+            }
         }
 
         if (placeDemoItems) {
             applyProgress(state.items(), itemByName, zoneByCode, now);
         }
-    }
-
-    /** One PLANNED item per tracked node, parents linked the way the plan links the nodes. */
-    private void plan(Hull hull, List<HierarchyNode> tracked, Instant created, Map<String, Item> itemByName) {
-        Map<Long, Item> itemByNode = new HashMap<>();
-        List<Item> made = new ArrayList<>(tracked.size());
-        for (HierarchyNode node : tracked) {
-            Item item = new Item();
-            item.setName(hull.getCode() + "-" + node.getCode());
-            item.setHull(hull);
-            item.setNode(node);
-            item.setParent(node.getParent() == null ? null : itemByNode.get(node.getParent().getId()));
-            item.setStatus(ItemStatus.PLANNED);
-            item.setPhase(ItemService.firstPhase(node, phases));
-            item.setCreatedAt(created);
-            item.setUpdatedAt(created);
-            itemByNode.put(node.getId(), item);
-            itemByName.put(item.getName(), item);
-            made.add(item);
-        }
-        items.saveAll(made);
-
-        List<Activity> history = new ArrayList<>(made.size());
-        for (Item item : made) {
-            history.add(activity(item, ActivityType.CREATED, null, null, "seed",
-                    "Planned from the Aloha class hierarchy", created));
-        }
-        activities.saveAll(history);
     }
 
     /** Puts items where the demo state says they are and writes the history that got them there. */

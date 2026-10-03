@@ -6,6 +6,7 @@ import com.shipyard.tracker.repo.ZoneRepository;
 import com.shipyard.tracker.service.Dtos.ActivityDto;
 import com.shipyard.tracker.service.Dtos.AreaDto;
 import com.shipyard.tracker.service.Dtos.AssembleRequest;
+import com.shipyard.tracker.service.Dtos.CreateHullRequest;
 import com.shipyard.tracker.service.Dtos.DesignBasisDto;
 import com.shipyard.tracker.service.Dtos.HullDto;
 import com.shipyard.tracker.service.Dtos.ItemDto;
@@ -19,6 +20,7 @@ import com.shipyard.tracker.service.Dtos.TreeNode;
 import com.shipyard.tracker.service.Dtos.UpdateItemRequest;
 import com.shipyard.tracker.service.Dtos.ZoneDto;
 import com.shipyard.tracker.service.HierarchyService;
+import com.shipyard.tracker.service.HullService;
 import com.shipyard.tracker.service.ItemService;
 import java.util.List;
 import org.springframework.http.HttpStatus;
@@ -39,12 +41,15 @@ public class ApiController {
 
     private final ItemService itemService;
     private final HierarchyService hierarchy;
+    private final HullService hullService;
     private final HullRepository hulls;
     private final ZoneRepository zones;
 
-    public ApiController(ItemService itemService, HierarchyService hierarchy, HullRepository hulls, ZoneRepository zones) {
+    public ApiController(ItemService itemService, HierarchyService hierarchy, HullService hullService,
+                         HullRepository hulls, ZoneRepository zones) {
         this.itemService = itemService;
         this.hierarchy = hierarchy;
+        this.hullService = hullService;
         this.hulls = hulls;
         this.zones = zones;
     }
@@ -81,6 +86,13 @@ public class ApiController {
         return hulls.findAllByOrderByCode().stream()
                 .map(h -> new HullDto(h.getId(), h.getCode(), h.getName(), h.getColor()))
                 .toList();
+    }
+
+    /** Admin only (see SecuritySupport). Creates the ship and all of its planned items. */
+    @PostMapping("/hulls")
+    @ResponseStatus(HttpStatus.CREATED)
+    public HullDto createHull(@RequestBody CreateHullRequest request) {
+        return hullService.create(request);
     }
 
     @GetMapping("/zones")
