@@ -3,7 +3,8 @@
 
 import { state, on, emit } from './state.js';
 import { api } from './api.js';
-import { h, clear, formatWhen, timeAgo, toast, parseSpecs, specsToText, NEUTRAL_OUTLINE } from './util.js';
+import { h, clear, formatWhen, timeAgo, toast, parseSpecs, specsToText, NEUTRAL_OUTLINE, STATUS_LABELS } from './util.js';
+import { defaultZoneId, zoneSelect } from './forms.js';
 
 const HIDE_DELAY_MS = 350;
 
@@ -131,7 +132,7 @@ function renderHeader() {
     h('div', { class: 'panel-head-row' },
       h('div', { class: 'panel-title' },
         h('h2', {}, item.name),
-        h('p', { class: 'panel-sub' }, [item.typeLabel, item.tagDescription].filter(Boolean).join(', '))),
+        h('p', { class: 'panel-sub' }, [item.levelLabel, item.areaName, STATUS_LABELS[item.status]].filter(Boolean).join(', '))),
       h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Close panel', onClick: hidePanel }, '✕')),
     h('p', { class: `pin-state${state.pinned ? ' is-pinned' : ''}` },
       state.pinned ? 'Pinned. Close with ✕ or Esc.' : 'Preview. Click the item on the map to keep this open.'),
@@ -191,13 +192,24 @@ function hullValue(item) {
 }
 
 function detailsView(item) {
-  const consumed = item.status === 'CONSUMED';
   const facts = [
     ['Hull', hullValue(item)],
-    [consumed ? 'Last seen in' : 'Location', item.zoneName || 'Not placed'],
-    consumed ? ['Status', ['Assembled into ', item.parentId ? itemLink(item.parentId, item.parentName) : 'a larger item']] : null,
-    item.tag ? ['Area tag', `${item.tag}, ${item.tagDescription}`] : null,
-    item.batch ? ['Quantity', `${item.quantity} ${item.unit || ''}`.trim()] : null,
+    ['Status', item.status === 'CONSUMED'
+      ? ['Joined into ', item.parentId ? itemLink(item.parentId, item.parentName) : 'its parent']
+      : STATUS_LABELS[item.status]],
+    [item.status === 'CONSUMED' ? 'Last seen in' : 'Location', item.zoneName || 'Not on the yard yet'],
+    ['Phase', `${item.phaseNumber}, ${item.phaseName}`],
+    item.routePhases.length > 1 ? ['Phase route', item.phaseRoute] : null,
+    ['Facility', item.phaseFacility],
+    item.parentId && item.status !== 'CONSUMED' ? ['Part of', itemLink(item.parentId, item.parentName)] : null,
+    item.areaName ? ['Area', `${item.areaCode}, ${item.areaName}`] : null,
+    item.function ? ['Function', item.function] : null,
+    item.band ? ['Band (aft to fwd)', item.band] : null,
+    item.latitude ? ['Latitude', `${item.latitude}${item.side ? `, ${item.side}` : ''}`] : (item.side ? ['Side', item.side] : null),
+    item.erectionOrder != null ? ['Dock erection order', String(item.erectionOrder)] : null,
+    item.outfitHeavy != null ? ['Outfit-heavy', item.outfitHeavy ? 'Yes' : 'No'] : null,
+    item.confidence ? ['Confidence', item.confidence] : null,
+    item.note ? ['Planning note', item.note] : null,
     ['Added', formatWhen(item.createdAt)],
     ['Last changed', `${timeAgo(item.updatedAt)}`],
   ].filter(Boolean);
@@ -216,93 +228,107 @@ function field(label, control, hint) {
   return h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), control, hint ? h('span', { class: 'field-hint' }, hint) : null);
 }
 
+/** Identity, hull and structure come from the plan, so the only free-form edit is the specs. */
 function detailsEdit(item) {
-  const refs = {};
-  refs.name = h('input', { type: 'text', value: item.name, maxlength: 120, required: true });
-  refs.hull = h('select', {},
-    h('option', { value: '' }, 'No hull'),
-    state.hulls.map((hl) => h('option', { value: hl.id, selected: hl.id === item.hullId }, hl.code)));
-  if (item.type === 'GRAND_BLOCK' || item.tag) {
-    refs.tag = h('input', { type: 'text', value: item.tag || '', maxlength: 5, placeholder: 'EA500', required: item.type === 'GRAND_BLOCK' });
-  }
-  if (item.batch) {
-    refs.quantity = h('input', { type: 'number', min: 1, step: 1, value: item.quantity ?? '', required: true });
-    refs.unit = h('input', { type: 'text', value: item.unit || 'pcs', maxlength: 12 });
-  }
-  refs.specs = h('textarea', { rows: 6, spellcheck: 'false', value: specsToText(item.specs) });
-  refs.note = h('input', { type: 'text', maxlength: 300, placeholder: 'Why the change (optional)' });
+  const refs = {
+    specs: h('textarea', { rows: 6, spellcheck: 'false', value: specsToText(item.specs) }),
+    note: h('input', { type: 'text', maxlength: 300, placeholder: 'Why the change (optional)' }),
+  };
   const error = h('p', { class: 'msg msg-error', role: 'alert', hidden: true });
 
-  const showError = (text) => { error.textContent = text; error.hidden = false; };
   const save = async (e) => {
     e.preventDefault();
     error.hidden = true;
     try {
-      const payload = {
-        name: refs.name.value,
-        hullId: refs.hull.value ? Number(refs.hull.value) : null,
-        tag: refs.tag ? refs.tag.value : item.tag,
-        quantity: refs.quantity ? Number(refs.quantity.value) : null,
-        unit: refs.unit ? refs.unit.value : null,
-        specs: parseSpecs(refs.specs.value),
-        note: refs.note.value,
-      };
-      await api.put(`/items/${item.id}`, payload);
+      await api.put(`/items/${item.id}`, { specs: parseSpecs(refs.specs.value), note: refs.note.value });
       toast('Saved changes');
-      emit('items-mutated', { id: item.id });
-    } catch (err) {
-      showError(err.message);
-    }
-  };
-
-  const form = h('form', { class: 'form', onSubmit: save },
-    field('Name', refs.name),
-    field('Hull', refs.hull),
-    refs.tag ? field('Area tag', refs.tag, 'Area code plus three digits, like EA500') : null,
-    refs.quantity ? h('div', { class: 'field-row' }, field('Quantity', refs.quantity), field('Unit', refs.unit)) : null,
-    field('Specs', refs.specs, 'One per line, like Weight (t): 92.5'),
-    field('Note', refs.note),
-    error,
-    h('button', { class: 'btn btn-primary', type: 'submit' }, 'Save changes'));
-
-  return h('div', { class: 'details' }, form, item.status === 'ACTIVE' ? moveForm(item) : null);
-}
-
-function moveForm(item) {
-  const select = h('select', { required: true },
-    h('option', { value: '' }, 'Choose a zone'),
-    state.zones.filter((z) => z.id !== item.zoneId).map((z) => h('option', { value: z.id }, z.name)));
-  const note = h('input', { type: 'text', maxlength: 300, placeholder: 'Reason or job (optional)' });
-  const error = h('p', { class: 'msg msg-error', role: 'alert', hidden: true });
-
-  const submit = async (e) => {
-    e.preventDefault();
-    error.hidden = true;
-    try {
-      const zone = state.zones.find((z) => z.id === Number(select.value));
-      await api.post(`/items/${item.id}/move`, { zoneId: Number(select.value), note: note.value });
-      toast(`Moved ${item.name} to ${zone ? zone.name : 'the new zone'}`);
       emit('items-mutated', { id: item.id });
     } catch (err) {
       error.textContent = err.message;
       error.hidden = false;
     }
   };
-  return h('form', { class: 'form form-move', onSubmit: submit },
-    h('h3', {}, 'Move to another zone'),
-    field('Zone', select),
-    field('Note', note),
+
+  const form = h('form', { class: 'form', onSubmit: save },
+    field('Specs', refs.specs, 'One per line, like Weight (t): 92.5'),
+    field('Note', refs.note),
     error,
-    h('button', { class: 'btn', type: 'submit' }, 'Move item'));
+    h('button', { class: 'btn btn-primary', type: 'submit' }, 'Save specs'));
+
+  return h('div', { class: 'details' },
+    form,
+    item.status === 'PLANNED' ? placeForm(item) : null,
+    item.status === 'ACTIVE' ? phaseForm(item) : null,
+    item.status === 'ACTIVE' ? moveForm(item) : null);
+}
+
+/** A small form that posts to an item action and reports errors inline. */
+function actionForm({ title, controls, button, request, success }) {
+  const error = h('p', { class: 'msg msg-error', role: 'alert', hidden: true });
+  const submit = async (e) => {
+    e.preventDefault();
+    error.hidden = true;
+    try {
+      const result = await request();
+      toast(success(result));
+      emit('items-mutated', { id: result.id });
+    } catch (err) {
+      error.textContent = err.message;
+      error.hidden = false;
+    }
+  };
+  return h('form', { class: 'form form-move', onSubmit: submit },
+    h('h3', {}, title), controls, error, h('button', { class: 'btn', type: 'submit' }, button));
+}
+
+function placeForm(item) {
+  const select = zoneSelect(defaultZoneId(item));
+  const note = h('input', { type: 'text', maxlength: 300, placeholder: 'Optional' });
+  return actionForm({
+    title: 'Place on the yard',
+    controls: [field('Zone', select), field('Note', note)],
+    button: 'Place item',
+    request: () => api.post(`/items/${item.id}/place`, { zoneId: select.value ? Number(select.value) : null, note: note.value }),
+    success: (result) => `Placed ${result.name}`,
+  });
+}
+
+function phaseForm(item) {
+  const others = state.meta.phases.filter((p) => item.routePhases.includes(p.number) && p.number !== item.phaseNumber);
+  if (!others.length) return null;
+  const select = h('select', { required: true },
+    h('option', { value: '' }, 'Choose a phase'),
+    others.map((p) => h('option', { value: p.number }, `${p.number}, ${p.name}`)));
+  const note = h('input', { type: 'text', maxlength: 300, placeholder: 'Optional' });
+  return actionForm({
+    title: 'Change phase',
+    controls: [field('Phase', select, `Route: ${item.phaseRoute}`), field('Note', note)],
+    button: 'Change phase',
+    request: () => api.post(`/items/${item.id}/phase`, { phase: Number(select.value), note: note.value }),
+    success: (result) => `${result.name} is now in phase ${result.phaseNumber}`,
+  });
+}
+
+function moveForm(item) {
+  const select = zoneSelect(null, item.zoneId);
+  const note = h('input', { type: 'text', maxlength: 300, placeholder: 'Reason or job (optional)' });
+  return actionForm({
+    title: 'Move to another zone',
+    controls: [field('Zone', select), field('Note', note)],
+    button: 'Move item',
+    request: () => api.post(`/items/${item.id}/move`, { zoneId: Number(select.value), note: note.value }),
+    success: (result) => `Moved ${result.name} to ${result.zoneName}`,
+  });
 }
 
 // ---------------------------------------------------------------- children
 
 function treeRow(node) {
+  const where = node.status === 'ACTIVE' && node.zoneName ? `On the yard, ${node.zoneName}` : STATUS_LABELS[node.status];
   return h('span', { class: 'node-row' },
     itemLink(node.id, node.name),
-    h('span', { class: 'chip' }, node.typeLabel),
-    node.quantity != null ? h('span', { class: 'qty' }, `${node.quantity} ${node.unit || ''}`.trim()) : null);
+    h('span', { class: 'chip' }, node.levelLabel),
+    h('span', { class: 'qty' }, where));
 }
 
 function treeNode(node, depth) {
@@ -318,8 +344,8 @@ function childrenTab() {
   const kids = current.tree.children;
   if (!kids.length) {
     return h('div', {},
-      h('p', { class: 'muted' }, 'Nothing has been assembled into this item.'),
-      state.mode === 'edit' ? h('p', { class: 'muted' }, 'To build an item from pieces, choose Assemble in the top bar.') : null);
+      h('p', { class: 'muted' }, 'Nothing is planned below this item.'),
+      state.mode === 'edit' ? h('p', { class: 'muted' }, 'Sections join into a block and blocks into a unit. Use Assemble in the top bar once all pieces are on the yard.') : null);
   }
   const list = h('ul', { class: 'tree tree-root' }, kids.map((kid) => treeNode(kid, 0)));
   const setAll = (open) => list.querySelectorAll('details').forEach((d) => { d.open = open; });
@@ -335,9 +361,11 @@ function childrenTab() {
 function describeActivity(a) {
   switch (a.type) {
     case 'MOVED': return `Moved from ${a.fromZone || 'unknown'} to ${a.toZone || 'unknown'}`;
-    case 'CREATED': return a.toZone ? `Added in ${a.toZone}` : 'Added to the yard log';
+    case 'CREATED': return 'Added to the hull plan';
+    case 'PLACED': return a.toZone ? `Placed on the yard in ${a.toZone}` : 'Placed on the yard';
+    case 'PHASE_CHANGED': return 'Changed phase';
     case 'ASSEMBLED': return a.toZone ? `Assembled in ${a.toZone}` : 'Assembled';
-    case 'CONSUMED': return 'Joined into a larger item';
+    case 'CONSUMED': return 'Joined into its parent';
     case 'EDITED': return 'Details edited';
     default: return a.type;
   }
@@ -349,7 +377,7 @@ function activityTab() {
   return h('ol', { class: 'timeline' }, current.activity.map((a) =>
     h('li', { class: `event event-${a.type.toLowerCase()}` },
       h('p', { class: 'event-title' }, describeActivity(a)),
-      a.note && a.type !== 'CREATED' ? h('p', { class: 'event-note' }, a.note) : null,
+      a.note ? h('p', { class: 'event-note' }, a.note) : null,
       h('p', { class: 'event-meta', title: formatWhen(a.timestamp) }, `${a.actor || 'Unknown'}, ${timeAgo(a.timestamp)}`))));
 }
 
@@ -363,9 +391,7 @@ function tally(list, keyOf) {
 
 function hullTab(item) {
   if (!item.hullId) {
-    return h('div', {},
-      h('p', { class: 'muted' }, 'This item isn\'t assigned to a hull, so its map tile has a dashed grey outline.'),
-      state.mode === 'edit' ? h('p', { class: 'muted' }, 'Pick a hull on the Details tab to assign one.') : null);
+    return h('p', { class: 'muted' }, 'This item isn\'t assigned to a hull.');
   }
   const hull = state.hulls.find((x) => x.id === item.hullId);
   const onYard = state.items.filter((i) => i.hullId === item.hullId);
@@ -377,8 +403,10 @@ function hullTab(item) {
       h('span', { class: 'hull-code' }, item.hullCode),
       hull ? h('span', { class: 'hull-name' }, hull.name) : null),
     h('p', {}, `${onYard.length} item${onYard.length === 1 ? '' : 's'} from this hull on the yard.`),
-    h('h3', {}, 'By type'),
-    rows(tally(onYard, (i) => i.typeLabel)),
+    h('h3', {}, 'By level'),
+    rows(tally(onYard, (i) => i.levelLabel)),
     h('h3', {}, 'By zone'),
-    rows(tally(onYard, (i) => i.zoneName)));
+    rows(tally(onYard, (i) => i.zoneName)),
+    h('h3', {}, 'By phase'),
+    rows(tally(onYard, (i) => `${i.phaseNumber}, ${i.phaseName}`)));
 }

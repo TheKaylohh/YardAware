@@ -1,12 +1,12 @@
 // Shared UI state plus a tiny publish/subscribe bus so modules don't import each other.
 
 export const state = {
-  meta: { types: [], areas: [] },
+  meta: { levels: [], areas: [], phases: [] },
   hulls: [],
   zones: [],
-  items: [],              // items on the yard (consumed components are not included)
+  items: [],              // items on the yard (planned and consumed items are not included)
   mode: 'view',           // 'view' | 'edit'
-  hiddenHulls: new Set(), // hull ids, or 'none' for items without a hull
+  hiddenHulls: new Set(), // hull ids
   query: '',
   panelItemId: null,
   pinned: false,

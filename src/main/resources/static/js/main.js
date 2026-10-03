@@ -5,7 +5,7 @@ import { api, csrfToken, SIGN_IN_HOME } from './api.js';
 import { h, toast } from './util.js';
 import { initMap, renderZones, renderItems, applySearch, focusItem, syncPinned, syncPicks } from './map.js';
 import { initPanel, showItem, hidePanel, scheduleHide, refreshPanel } from './panel.js';
-import { openAddItem, openAssemble } from './forms.js';
+import { openPlaceItem, openAssemble } from './forms.js';
 
 const $ = (id) => document.getElementById(id);
 
@@ -83,12 +83,11 @@ async function signOut() {
 
 function buildFilters() {
   const host = $('filters');
-  const chips = [...state.hulls.map((hl) => ({ key: hl.id, label: hl.code, color: hl.color })),
-    { key: 'none', label: 'No hull', color: null }];
+  const chips = state.hulls.map((hl) => ({ key: hl.id, label: hl.code, color: hl.color }));
   for (const chip of chips) {
     const button = h('button', {
       class: 'hull-chip', type: 'button', 'aria-pressed': 'true',
-      title: chip.color ? `Show or hide hull ${chip.label}` : 'Show or hide items without a hull',
+      title: `Show or hide hull ${chip.label}`,
       onClick: () => {
         if (state.hiddenHulls.has(chip.key)) state.hiddenHulls.delete(chip.key);
         else state.hiddenHulls.add(chip.key);
@@ -96,7 +95,7 @@ function buildFilters() {
         renderItems();
       },
     },
-    h('span', { class: `swatch${chip.color ? '' : ' swatch-none'}`, style: chip.color ? `--c:${chip.color}` : null }),
+    h('span', { class: 'swatch', style: `--c:${chip.color}` }),
     chip.label);
     host.append(button);
   }
@@ -123,7 +122,7 @@ function wireTopBar() {
   });
 
   $('btn-signout').addEventListener('click', signOut);
-  $('btn-add').addEventListener('click', openAddItem);
+  $('btn-add').addEventListener('click', openPlaceItem);
   $('btn-assemble').addEventListener('click', () => (state.assembling ? endAssemble() : startAssemble()));
   $('assemble-cancel').addEventListener('click', endAssemble);
   $('assemble-go').addEventListener('click', () => openAssemble([...state.picked]));
@@ -163,7 +162,7 @@ function endAssemble() {
 
 function updateAssembleBar() {
   const n = state.picked.size;
-  $('assemble-count').textContent = n ? `${n} selected` : 'Select the pieces to join';
+  $('assemble-count').textContent = n ? `${n} selected` : 'Select all pieces of one block or unit';
   $('assemble-go').disabled = n < 2;
 }
 

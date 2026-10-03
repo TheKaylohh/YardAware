@@ -5,58 +5,64 @@ import com.fasterxml.jackson.core.type.TypeReference;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shipyard.tracker.domain.Activity;
 import com.shipyard.tracker.domain.ActivityType;
-import com.shipyard.tracker.domain.AreaCode;
+import com.shipyard.tracker.domain.Area;
 import com.shipyard.tracker.domain.Hull;
+import com.shipyard.tracker.domain.HierarchyNode;
 import com.shipyard.tracker.domain.Item;
 import com.shipyard.tracker.domain.ItemStatus;
-import com.shipyard.tracker.domain.ItemType;
+import com.shipyard.tracker.domain.Phase;
+import com.shipyard.tracker.domain.PhaseRoute;
 import com.shipyard.tracker.domain.Zone;
 import com.shipyard.tracker.repo.ActivityRepository;
 import com.shipyard.tracker.repo.HullRepository;
 import com.shipyard.tracker.repo.ItemRepository;
+import com.shipyard.tracker.repo.PhaseRepository;
 import com.shipyard.tracker.repo.ZoneRepository;
 import com.shipyard.tracker.service.Dtos.ActivityDto;
 import com.shipyard.tracker.service.Dtos.AssembleRequest;
-import com.shipyard.tracker.service.Dtos.CreateItemRequest;
 import com.shipyard.tracker.service.Dtos.ItemDto;
 import com.shipyard.tracker.service.Dtos.MoveRequest;
+import com.shipyard.tracker.service.Dtos.PhaseRequest;
+import com.shipyard.tracker.service.Dtos.PlaceRequest;
 import com.shipyard.tracker.service.Dtos.TreeNode;
 import com.shipyard.tracker.service.Dtos.UpdateItemRequest;
 import java.time.Instant;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
-import java.util.Set;
-import java.util.stream.Collectors;
 import java.util.regex.Pattern;
-import java.util.stream.Stream;
+import java.util.stream.Collectors;
 import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
 
-/** All business rules for items live here so the controller stays thin and the rules are testable. */
+/**
+ * All business rules for items live here so the controller stays thin and the rules are testable.
+ *
+ * <p>The structure of the ship is fixed by the plan (the hierarchy tables), so items are never created or renamed
+ * here. They move through a lifecycle instead: PLANNED -> placed on the yard (ACTIVE) -> moved between zones and
+ * production phases -> joined into their planned parent (CONSUMED), which then becomes ACTIVE itself.
+ */
 @Service
 public class ItemService {
 
     private static final int MAX_SPECS_LENGTH = 4000;
-    private static final int MAX_NAME_LENGTH = 120;
     private static final int MAX_NOTE_LENGTH = 500;
-    private static final int MAX_UNIT_LENGTH = 20;
     private static final int MAX_ASSEMBLY_PARTS = 50;
     private static final int MAX_SPEC_ENTRIES = 50;
     private static final int MAX_SPEC_KEY_LENGTH = 80;
     private static final int MAX_SPEC_VALUE_LENGTH = 500;
     /** Activity.note column size. Generated notes ("Assembled from ...") are cut to fit instead of failing. */
     private static final int ACTIVITY_NOTE_COLUMN = 1000;
-    /** Control characters and bidirectional overrides, which can disguise names and notes in the audit trail. */
+    /** Control characters and bidirectional overrides, which can disguise notes in the audit trail. */
     private static final Pattern UNSAFE_TEXT = Pattern.compile("[\\p{Cc}\\u202A-\\u202E\\u2066-\\u2069]");
 
     private final ItemRepository items;
     private final HullRepository hulls;
     private final ZoneRepository zones;
+    private final PhaseRepository phases;
     private final ActivityRepository activities;
     private final CurrentUserProvider users;
     private final ObjectMapper mapper;
@@ -64,12 +70,14 @@ public class ItemService {
     public ItemService(ItemRepository items,
                        HullRepository hulls,
                        ZoneRepository zones,
+                       PhaseRepository phases,
                        ActivityRepository activities,
                        CurrentUserProvider users,
                        ObjectMapper mapper) {
         this.items = items;
         this.hulls = hulls;
         this.zones = zones;
+        this.phases = phases;
         this.activities = activities;
         this.users = users;
         this.mapper = mapper;
@@ -80,7 +88,17 @@ public class ItemService {
     /** Items that physically exist on the yard, i.e. everything drawn on the map. */
     @Transactional(readOnly = true)
     public List<ItemDto> listOnMap() {
-        return items.findByStatusOrderByName(ItemStatus.ACTIVE).stream().map(this::toDto).toList();
+        return list(ItemStatus.ACTIVE, null);
+    }
+
+    /** Items with the given status (default ACTIVE), optionally for one hull. */
+    @Transactional(readOnly = true)
+    public List<ItemDto> list(ItemStatus status, Long hullId) {
+        ItemStatus wanted = status == null ? ItemStatus.ACTIVE : status;
+        List<Item> found = hullId == null
+                ? items.findByStatusOrderByName(wanted)
+                : items.findByStatusAndHullOrderByName(wanted, requireHull(hullId));
+        return found.stream().map(this::toDto).toList();
     }
 
     @Transactional(readOnly = true)
@@ -88,7 +106,7 @@ public class ItemService {
         return toDto(find(id));
     }
 
-    /** The item with all of its components, recursively. Consumed components are included. */
+    /** The item with everything planned below it, recursively. Consumed and planned pieces are included. */
     @Transactional(readOnly = true)
     public TreeNode tree(Long id) {
         return toNode(find(id));
@@ -111,94 +129,47 @@ public class ItemService {
 
     // --------------------------------------------------------------- writes
 
+    /** Puts a planned item on the yard. It starts in the first phase of its route. */
     @Transactional
-    public ItemDto create(CreateItemRequest req) {
-        if (req.type() == null) {
-            throw bad("Choose an item type.");
+    public ItemDto place(Long id, PlaceRequest req) {
+        String note = userNote(req == null ? null : req.note());   // check what the user typed before looking at state
+        Item item = find(id);
+        if (item.getStatus() != ItemStatus.PLANNED) {
+            throw bad(item.getName() + " is already on the yard or has been built into something else.");
         }
-        Hull hull = optionalHull(req.hullId());
-        Zone zone = requireZone(req.zoneId());
-        String tag = normalizeTag(req.tag(), req.type());
-        String name = resolveName(req.name(), req.type(), hull, tag);
-        ensureNameFree(name, null);
+        Item parent = item.getParent();
+        if (parent != null && parent.getStatus() != ItemStatus.PLANNED) {
+            throw bad(parent.getName() + " has already been built, so " + item.getName() + " can't be placed on its own.");
+        }
+        Zone zone = requireZone(req == null ? null : req.zoneId());
 
-        Item item = new Item();
-        item.setName(name);
-        item.setType(req.type());
-        item.setHull(hull);
+        item.setStatus(ItemStatus.ACTIVE);
         item.setZone(zone);
-        item.setTag(tag);
-        applyBatch(item, req.quantity(), req.unit());
-        item.setSpecs(toJson(req.specs()));
-        Instant now = Instant.now();
-        item.setCreatedAt(now);
-        item.setUpdatedAt(now);
+        item.setUpdatedAt(Instant.now());
         items.save(item);
-
-        log(item, ActivityType.CREATED, null, zone, noteOr(userNote(req.note()), "Added to the yard log"));
+        log(item, ActivityType.PLACED, null, zone, noteOr(note, "Placed on the yard"));
         return toDto(item);
     }
 
+    /** Only the free-form specs are editable: identity, hull and structure come from the plan. */
     @Transactional
     public ItemDto update(Long id, UpdateItemRequest req) {
         Item item = find(id);
-        List<String> changed = new ArrayList<>();
-
-        if (req.name() != null && !req.name().isBlank() && !req.name().trim().equals(item.getName())) {
-            String name = req.name().trim();
-            checkNameLength(name);
-            checkText(name, "Names");
-            ensureNameFree(name, item.getId());
-            item.setName(name);
-            changed.add("name");
-        }
-
-        Hull hull = optionalHull(req.hullId());
-        if (!Objects.equals(idOf(hull), idOf(item.getHull()))) {
-            item.setHull(hull);
-            changed.add("hull");
-        }
-
-        String tag = normalizeTag(req.tag(), item.getType());
-        if (!Objects.equals(tag, item.getTag())) {
-            item.setTag(tag);
-            changed.add("tag");
-        }
-
-        if (item.getType().isBatch()) {
-            Integer oldQuantity = item.getQuantity();
-            String oldUnit = item.getUnit();
-            applyBatch(item, req.quantity(), req.unit());
-            if (!Objects.equals(oldQuantity, item.getQuantity()) || !Objects.equals(oldUnit, item.getUnit())) {
-                changed.add("quantity");
-            }
-        }
-
         String specs = toJson(req.specs());
-        if (!Objects.equals(specs, item.getSpecs())) {
-            item.setSpecs(specs);
-            changed.add("specs");
-        }
-
-        if (changed.isEmpty()) {
+        if (Objects.equals(specs, item.getSpecs())) {
             return toDto(item);
         }
+        item.setSpecs(specs);
         item.setUpdatedAt(Instant.now());
         items.save(item);
-
-        String note = "Changed " + String.join(", ", changed);
         String extra = userNote(req.note());
-        log(item, ActivityType.EDITED, null, null, extra == null ? note : note + ". " + extra);
+        log(item, ActivityType.EDITED, null, null, extra == null ? "Changed specs" : "Changed specs. " + extra);
         return toDto(item);
     }
 
     @Transactional
     public ItemDto move(Long id, MoveRequest req) {
-        Item item = find(id);
-        if (item.getStatus() != ItemStatus.ACTIVE) {
-            String into = item.getParent() == null ? "a larger item" : item.getParent().getName();
-            throw bad(item.getName() + " was assembled into " + into + " and can't be moved on its own.");
-        }
+        Item item = requireActive(find(id), "moved");
         Zone to = requireZone(req.zoneId());
         Zone from = item.getZone();
         if (from != null && from.getId().equals(to.getId())) {
@@ -211,18 +182,40 @@ public class ItemService {
         return toDto(item);
     }
 
+    /** Moves an item to another phase of its own route (for example section assembly -> section outfitting). */
+    @Transactional
+    public ItemDto changePhase(Long id, PhaseRequest req) {
+        Item item = requireActive(find(id), "changed phase");
+        if (req.phase() == null) {
+            throw bad("Choose a phase.");
+        }
+        List<Integer> route = PhaseRoute.parse(item.getNode().getPhaseRoute());
+        if (!route.contains(req.phase())) {
+            throw bad("Phase " + req.phase() + " isn't on the route of " + item.getName() + " ("
+                    + item.getNode().getPhaseRoute() + ").");
+        }
+        Phase to = phases.findById(req.phase()).orElseThrow(() -> bad("That phase doesn't exist."));
+        Phase from = item.getPhase();
+        if (from.getNumber().equals(to.getNumber())) {
+            throw bad(item.getName() + " is already in phase " + to.getNumber() + ", " + to.getName() + ".");
+        }
+        item.setPhase(to);
+        item.setUpdatedAt(Instant.now());
+        items.save(item);
+
+        String note = "Phase " + from.getNumber() + " " + from.getName() + " to " + to.getNumber() + " " + to.getName();
+        String extra = userNote(req.note());
+        log(item, ActivityType.PHASE_CHANGED, null, null, extra == null ? note : note + ". " + extra);
+        return toDto(item);
+    }
+
     /**
-     * Joins several items into a new parent. The parent is created and placed on the map; the children
-     * are marked CONSUMED (kept for the component tree and their history, but removed from the map).
+     * Joins pieces into their planned parent (sections into a block, blocks into a unit). All pieces of the parent must
+     * be on the yard and selected together. The pieces are marked CONSUMED (kept for the tree and their history,
+     * removed from the map) and the parent becomes ACTIVE in the chosen zone.
      */
     @Transactional
     public ItemDto assemble(AssembleRequest req) {
-        if (req.type() == null) {
-            throw bad("Choose what the assembled item is.");
-        }
-        if (req.type().isBatch() || req.type() == ItemType.TOOL) {
-            throw bad("An assembly can't be a " + req.type().getLabel().toLowerCase() + ".");
-        }
         List<Long> ids = req.childIds() == null ? List.<Long>of() : req.childIds().stream().distinct().toList();
         if (ids.size() < 2) {
             throw bad("Select at least two items to assemble.");
@@ -231,44 +224,47 @@ public class ItemService {
             throw bad("An assembly can have at most " + MAX_ASSEMBLY_PARTS + " parts at a time.");
         }
         String extra = userNote(req.note());
+        List<Item> children = ids.stream().map(this::find).toList();
 
-        List<Item> children = new ArrayList<>();
-        for (Long id : ids) {
-            children.add(find(id));
-        }
         for (Item child : children) {
-            if (child.getStatus() != ItemStatus.ACTIVE) {
-                throw bad(child.getName() + " has already been assembled into something else.");
+            if (child.getParent() == null) {
+                throw bad(child.getName() + " is a unit, the top of the hierarchy, so it can't be assembled into anything.");
             }
-            if (child.getType() == ItemType.TOOL) {
-                throw bad(child.getName() + " is a tool and can't be part of an assembly.");
+            if (child.getStatus() == ItemStatus.PLANNED) {
+                throw bad(child.getName() + " isn't on the yard yet. Place it first.");
+            }
+            if (child.getStatus() == ItemStatus.CONSUMED) {
+                throw bad(child.getName() + " has already been assembled into " + child.getParent().getName() + ".");
             }
         }
 
-        Set<Long> hullIds = children.stream()
-                .map(Item::getHull)
-                .filter(Objects::nonNull)
-                .map(Hull::getId)
-                .collect(Collectors.toSet());
-        if (hullIds.size() > 1) {
-            throw bad("These items belong to different hulls. Only items from the same hull can be assembled together.");
+        Item parent = children.get(0).getParent();
+        for (Item child : children) {
+            if (!child.getParent().getId().equals(parent.getId())) {
+                throw bad("These items belong to different parents (" + parent.getName() + ", "
+                        + child.getParent().getName() + "). Pick the pieces of one block or unit at a time.");
+            }
         }
-        Hull hull = children.stream().map(Item::getHull).filter(Objects::nonNull).findFirst().orElse(null);
+        if (parent.getStatus() != ItemStatus.PLANNED) {
+            throw bad(parent.getName() + " has already been built.");
+        }
+        long expected = items.countByParent(parent);
+        if (children.size() != expected) {
+            String missing = items.findByParentOrderByNodeSortOrder(parent).stream()
+                    .filter(sibling -> ids.stream().noneMatch(id -> id.equals(sibling.getId())))
+                    .map(Item::getName)
+                    .collect(Collectors.joining(", "));
+            throw bad(parent.getName() + " is made of " + expected + " pieces and you selected " + children.size()
+                    + ". Missing: " + missing + ".");
+        }
 
         Zone zone = req.zoneId() != null ? requireZone(req.zoneId()) : children.get(0).getZone();
-        String tag = normalizeTag(req.tag(), req.type());
-        String name = resolveName(req.name(), req.type(), hull, tag);
-        ensureNameFree(name, null);
-
         Instant now = Instant.now();
-        Item parent = new Item();
-        parent.setName(name);
-        parent.setType(req.type());
-        parent.setHull(hull);
+        Phase first = firstPhase(parent.getNode());
+
+        parent.setStatus(ItemStatus.ACTIVE);
         parent.setZone(zone);
-        parent.setTag(tag);
-        parent.setSpecs(toJson(req.specs()));
-        parent.setCreatedAt(now);
+        parent.setPhase(first);
         parent.setUpdatedAt(now);
         items.save(parent);
 
@@ -279,7 +275,6 @@ public class ItemService {
         for (Item child : children) {
             Zone lastZone = child.getZone();
             child.setStatus(ItemStatus.CONSUMED);
-            child.setParent(parent);
             child.setUpdatedAt(now);
             items.save(child);
             log(child, ActivityType.CONSUMED, lastZone, null, "Assembled into " + parent.getName());
@@ -289,9 +284,29 @@ public class ItemService {
 
     // -------------------------------------------------------------- helpers
 
+    /** First phase of the node's route; the primary phase for nodes without a route. */
+    public static Phase firstPhase(HierarchyNode node, PhaseRepository phases) {
+        List<Integer> route = PhaseRoute.parse(node.getPhaseRoute());
+        return route.isEmpty() ? node.getPrimaryPhase() : phases.getReferenceById(route.get(0));
+    }
+
+    private Phase firstPhase(HierarchyNode node) {
+        return firstPhase(node, phases);
+    }
+
     private Item find(Long id) {
         return items.findById(id)
                 .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No item with id " + id));
+    }
+
+    private Item requireActive(Item item, String verb) {
+        if (item.getStatus() == ItemStatus.PLANNED) {
+            throw bad(item.getName() + " isn't on the yard yet, so it can't be " + verb + ". Place it first.");
+        }
+        if (item.getStatus() == ItemStatus.CONSUMED) {
+            throw bad(item.getName() + " was assembled into " + item.getParent().getName() + " and can't be " + verb + " on its own.");
+        }
+        return item;
     }
 
     private Zone requireZone(Long zoneId) {
@@ -301,80 +316,8 @@ public class ItemService {
         return zones.findById(zoneId).orElseThrow(() -> bad("That zone doesn't exist."));
     }
 
-    private Hull optionalHull(Long hullId) {
-        if (hullId == null) {
-            return null;
-        }
+    private Hull requireHull(Long hullId) {
         return hulls.findById(hullId).orElseThrow(() -> bad("That hull doesn't exist."));
-    }
-
-    private static Long idOf(Hull hull) {
-        return hull == null ? null : hull.getId();
-    }
-
-    /** Trims and upper-cases the tag and checks it. Grand blocks must have one; other types may. */
-    private String normalizeTag(String raw, ItemType type) {
-        String tag = raw == null ? "" : raw.trim().toUpperCase();
-        if (tag.isEmpty()) {
-            if (type == ItemType.GRAND_BLOCK) {
-                throw bad("Grand blocks need an area tag such as EA500.");
-            }
-            return null;
-        }
-        if (AreaCode.areaOf(tag).isEmpty()) {
-            String areas = Stream.of(AreaCode.values()).map(Enum::name).collect(Collectors.joining(", "));
-            throw bad("The tag needs an area code plus three digits, like EA500. Area codes: " + areas + ".");
-        }
-        return tag;
-    }
-
-    /** Uses the typed name, or builds one like S041-EA500 for grand blocks when the name is left blank. */
-    private String resolveName(String raw, ItemType type, Hull hull, String tag) {
-        String name = raw == null ? "" : raw.trim();
-        if (name.isEmpty()) {
-            if (type == ItemType.GRAND_BLOCK && hull != null && tag != null) {
-                return hull.getCode() + "-" + tag;
-            }
-            throw bad("Give the item a name.");
-        }
-        checkNameLength(name);
-        checkText(name, "Names");
-        return name;
-    }
-
-    private void checkNameLength(String name) {
-        if (name.length() > MAX_NAME_LENGTH) {
-            throw bad("Names can be at most " + MAX_NAME_LENGTH + " characters.");
-        }
-    }
-
-    private void ensureNameFree(String name, Long ownId) {
-        boolean taken = items.findByNameIgnoreCase(name)
-                .filter(other -> !other.getId().equals(ownId))
-                .isPresent();
-        if (taken) {
-            throw bad("An item named " + name + " already exists.");
-        }
-    }
-
-    private void applyBatch(Item item, Integer quantity, String unit) {
-        if (item.getType().isBatch()) {
-            if (quantity == null || quantity <= 0) {
-                throw bad("Batches need a quantity above zero.");
-            }
-            item.setQuantity(quantity);
-            String cleanUnit = blankToNull(unit);
-            if (cleanUnit != null) {
-                if (cleanUnit.length() > MAX_UNIT_LENGTH) {
-                    throw bad("Units can be at most " + MAX_UNIT_LENGTH + " characters.");
-                }
-                checkText(cleanUnit, "Units");
-            }
-            item.setUnit(cleanUnit == null ? "pcs" : cleanUnit);
-        } else {
-            item.setQuantity(null);
-            item.setUnit(null);
-        }
     }
 
     private void log(Item item, ActivityType type, Zone from, Zone to, String note) {
@@ -472,24 +415,38 @@ public class ItemService {
         Hull h = i.getHull();
         Zone z = i.getZone();
         Item p = i.getParent();
+        HierarchyNode n = i.getNode();
+        Area a = n.getArea();
+        Phase ph = i.getPhase();
         return new ItemDto(
                 i.getId(),
                 i.getName(),
-                i.getType(),
-                i.getType().getLabel(),
-                i.getType().isBatch(),
+                n.getCode(),
+                n.getLevel(),
+                n.getLevel().getLabel(),
                 i.getStatus(),
-                h == null ? null : h.getId(),
-                h == null ? null : h.getCode(),
-                h == null ? null : h.getColor(),
+                h.getId(),
+                h.getCode(),
+                h.getColor(),
                 z == null ? null : z.getId(),
                 z == null ? null : z.getName(),
                 p == null ? null : p.getId(),
                 p == null ? null : p.getName(),
-                i.getTag(),
-                AreaCode.describe(i.getTag()).orElse(null),
-                i.getQuantity(),
-                i.getUnit(),
+                a == null ? null : a.getCode(),
+                a == null ? null : a.getName(),
+                n.getBand(),
+                n.getLatitude(),
+                n.getSide(),
+                ph.getNumber(),
+                ph.getName(),
+                ph.getFacility(),
+                n.getPhaseRoute(),
+                PhaseRoute.parse(n.getPhaseRoute()),
+                n.getErectionOrder(),
+                n.getOutfitHeavy(),
+                n.getFunction(),
+                n.getConfidence(),
+                n.getNote(),
                 (int) items.countByParent(i),
                 fromJson(i.getSpecs()),
                 i.getCreatedAt(),
@@ -497,16 +454,14 @@ public class ItemService {
     }
 
     private TreeNode toNode(Item item) {
-        List<TreeNode> kids = items.findByParentOrderByName(item).stream().map(this::toNode).toList();
+        List<TreeNode> kids = items.findByParentOrderByNodeSortOrder(item).stream().map(this::toNode).toList();
         return new TreeNode(
                 item.getId(),
                 item.getName(),
-                item.getType(),
-                item.getType().getLabel(),
+                item.getNode().getLevel(),
+                item.getNode().getLevel().getLabel(),
                 item.getStatus(),
-                item.getTag(),
-                item.getQuantity(),
-                item.getUnit(),
+                item.getZone() == null ? null : item.getZone().getName(),
                 kids);
     }
 

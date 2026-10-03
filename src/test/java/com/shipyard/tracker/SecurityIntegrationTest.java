@@ -25,9 +25,11 @@ class SecurityIntegrationTest {
         return rest.withBasicAuth(user, password);
     }
 
+    private static final String PLACE_URL = "/api/items/1/place";
+
     /** Passes the role check but fails validation (no zone), so a 400 proves the request was allowed through. */
-    private static Map<String, Object> incompleteItem() {
-        return Map.of("type", "UNIT", "name", "SEC-TEST");
+    private static Map<String, Object> incompletePlacement() {
+        return Map.of("note", "SEC-TEST");
     }
 
     @Test
@@ -44,14 +46,14 @@ class SecurityIntegrationTest {
     @Test
     void viewerCanReadButNotWrite() {
         assertEquals(200, as("viewer", "viewer123").getForEntity("/api/items", String.class).getStatusCode().value());
-        ResponseEntity<String> write = as("viewer", "viewer123").postForEntity("/api/items", incompleteItem(), String.class);
+        ResponseEntity<String> write = as("viewer", "viewer123").postForEntity(PLACE_URL, incompletePlacement(), String.class);
         assertEquals(403, write.getStatusCode().value());
     }
 
     @Test
     void editorAndAdminCanWrite() {
         for (String[] login : new String[][] {{"editor", "editor123"}, {"admin", "admin123"}}) {
-            ResponseEntity<String> write = as(login[0], login[1]).postForEntity("/api/items", incompleteItem(), String.class);
+            ResponseEntity<String> write = as(login[0], login[1]).postForEntity(PLACE_URL, incompletePlacement(), String.class);
             assertEquals(400, write.getStatusCode().value(), login[0]);
             assertTrue(write.getBody().contains("Choose a zone."), login[0]);
         }

@@ -33,26 +33,26 @@ class HardeningIntegrationTest {
 
     @Test
     void overlongNoteIsRejectedWithAReadableMessageNotADatabaseError() {
-        Map<String, Object> zoneless = Map.of("type", "UNIT", "name", "H-NOTE", "zoneId", 1, "note", "x".repeat(2000));
-        ResponseEntity<String> response = editor().postForEntity("/api/items", zoneless, String.class);
+        Map<String, Object> request = Map.of("zoneId", 1, "note", "x".repeat(2000));
+        ResponseEntity<String> response = editor().postForEntity("/api/items/1/place", request, String.class);
         assertEquals(400, response.getStatusCode().value());
         assertTrue(response.getBody().contains("Notes can be at most"));
         assertFalse(response.getBody().toLowerCase().contains("sql"));
     }
 
     @Test
-    void controlCharactersInNamesAreRejected() {
-        Map<String, Object> item = Map.of("type", "UNIT", "name", "H-‮evil", "zoneId", 1);
-        ResponseEntity<String> response = editor().postForEntity("/api/items", item, String.class);
+    void controlCharactersInNotesAreRejected() {
+        Map<String, Object> request = Map.of("zoneId", 1, "note", "H-\u202Eevil");
+        ResponseEntity<String> response = editor().postForEntity("/api/items/1/place", request, String.class);
         assertEquals(400, response.getStatusCode().value());
         assertTrue(response.getBody().contains("control or text-direction"));
     }
 
     @Test
     void nestedSpecsAreRejected() {
-        Map<String, Object> item = Map.of("type", "UNIT", "name", "H-SPECS", "zoneId", 1,
-                "specs", Map.of("Weight", Map.of("deep", 1)));
-        ResponseEntity<String> response = editor().postForEntity("/api/items", item, String.class);
+        Map<String, Object> request = Map.of("specs", Map.of("Weight", Map.of("deep", 1)));
+        ResponseEntity<String> response = editor().exchange("/api/items/1", HttpMethod.PUT,
+                new HttpEntity<>(request), String.class);
         assertEquals(400, response.getStatusCode().value());
     }
 
@@ -60,8 +60,8 @@ class HardeningIntegrationTest {
     void malformedJsonGetsAGenericMessage() {
         HttpHeaders headers = new HttpHeaders();
         headers.setContentType(MediaType.APPLICATION_JSON);
-        ResponseEntity<String> response = editor().exchange("/api/items", HttpMethod.POST,
-                new HttpEntity<>("{\"type\": \"NOT_A_TYPE\"", headers), String.class);
+        ResponseEntity<String> response = editor().exchange("/api/items/1/place", HttpMethod.POST,
+                new HttpEntity<>("{\"zoneId\": ", headers), String.class);
         assertEquals(400, response.getStatusCode().value());
         assertTrue(response.getBody().contains("malformed"));
         assertFalse(response.getBody().contains("Exception"));

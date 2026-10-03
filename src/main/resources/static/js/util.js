@@ -90,15 +90,17 @@ export function specsToText(specs) {
     .join('\n');
 }
 
-/** Short code drawn on each map tile. */
-export const TYPE_CODES = {
-  SUB_ASSEMBLY: 'SA',
-  SECTION: 'SC',
-  BLOCK: 'BK',
-  GRAND_BLOCK: 'GB',
+/** Short code drawn on each map tile, by hierarchy level. */
+export const LEVEL_CODES = {
   UNIT: 'UN',
-  PIPE_OUTFITTING: 'PO',
-  TOOL: 'TL',
+  BLOCK: 'BK',
+  SECTION: 'SC',
+};
+
+export const STATUS_LABELS = {
+  PLANNED: 'Planned',
+  ACTIVE: 'On the yard',
+  CONSUMED: 'Joined into parent',
 };
 
 export const NEUTRAL_OUTLINE = '#7C8B92';

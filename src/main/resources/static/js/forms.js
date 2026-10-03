@@ -1,18 +1,8 @@
-// Modal forms: add an item, and assemble several items into a new one.
+// Modal forms: place a planned item on the yard, and assemble the pieces of a block or unit.
 
 import { state, emit } from './state.js';
 import { api } from './api.js';
-import { h, clear, toast, parseSpecs } from './util.js';
-
-const TAG_PATTERN = /^([A-Z]{2})(\d{3})$/;
-
-/** "EA500" -> "Engine room, level 5", or null when the tag isn't valid. */
-export function describeTag(raw) {
-  const match = TAG_PATTERN.exec((raw || '').trim().toUpperCase());
-  if (!match) return null;
-  const area = state.meta.areas.find((a) => a.code === match[1]);
-  return area ? `${area.name}, level ${match[2][0]}` : null;
-}
+import { h, clear, toast } from './util.js';
 
 function openDialog({ title, content, submitLabel, onSubmit }) {
   const dialog = document.getElementById('modal');
@@ -55,150 +45,127 @@ function field(label, control, hint) {
   return { node: h('label', { class: 'field' }, h('span', { class: 'field-label' }, label), control, hintNode), hint: hintNode };
 }
 
-function hullSelect(selectedId) {
-  return h('select', {},
-    h('option', { value: '' }, 'No hull'),
-    state.hulls.map((hl) => h('option', { value: hl.id, selected: hl.id === selectedId }, hl.code)));
+/** The zone where the item's current phase happens (matched on the workbook facility code), if any zone maps to it. */
+export function defaultZoneId(item) {
+  const zone = state.zones.find((z) => z.facility && z.facility === item.phaseFacility);
+  return zone ? zone.id : null;
 }
 
-function zoneSelect(selectedId) {
+export function zoneSelect(selectedId, excludeId = null) {
   return h('select', { required: true },
     h('option', { value: '' }, 'Choose a zone'),
-    state.zones.map((z) => h('option', { value: z.id, selected: z.id === selectedId }, z.name)));
+    state.zones.filter((z) => z.id !== excludeId)
+      .map((z) => h('option', { value: z.id, selected: z.id === selectedId }, z.name)));
 }
 
-function typeSelect(selected, skip = () => false) {
-  return h('select', {},
-    state.meta.types.filter((t) => !skip(t)).map((t) => h('option', { value: t.code, selected: t.code === selected }, t.label)));
-}
+// ------------------------------------------------------------- place item
 
-// ---------------------------------------------------------------- add item
-
-export function openAddItem() {
+/** Pick a planned item (one of the hull's units, blocks or sections) and put it on the yard. */
+export function openPlaceItem() {
   const refs = {
-    type: typeSelect('SUB_ASSEMBLY'),
-    name: h('input', { type: 'text', maxlength: 120, placeholder: 'Unique name, like S041-EA510' }),
-    hull: hullSelect(state.hulls.length ? state.hulls[0].id : null),
+    hull: h('select', {}, state.hulls.map((hl) => h('option', { value: hl.id }, hl.code))),
+    item: h('input', { type: 'text', list: 'planned-items', placeholder: 'Type to search, like BA-U01-B02', autocomplete: 'off', required: true }),
     zone: zoneSelect(null),
-    tag: h('input', { type: 'text', maxlength: 5, placeholder: 'EA500', autocapitalize: 'characters' }),
-    quantity: h('input', { type: 'number', min: 1, step: 1, placeholder: '48' }),
-    unit: h('input', { type: 'text', maxlength: 12, value: 'pcs' }),
-    specs: h('textarea', { rows: 4, spellcheck: 'false', placeholder: 'Weight (t): 92.5\nDrawing: EA510-BLK' }),
     note: h('input', { type: 'text', maxlength: 300, placeholder: 'Optional' }),
   };
-  const nameField = field('Name', refs.name, null);
-  const tagField = field('Area tag', refs.tag, 'Area code plus three digits, like EA500');
-  const qtyRow = h('div', { class: 'field-row' }, field('Quantity', refs.quantity).node, field('Unit', refs.unit).node);
+  const datalist = h('datalist', { id: 'planned-items' });
+  const itemField = field('Planned item', refs.item, 'Loading the plan');
+  let planned = new Map(); // item name -> item
 
-  const isBatch = () => state.meta.types.find((t) => t.code === refs.type.value)?.batch;
-  const sync = () => {
-    const type = refs.type.value;
-    tagField.node.hidden = type !== 'GRAND_BLOCK';
-    qtyRow.hidden = !isBatch();
-    if (type === 'TOOL') refs.hull.value = '';
-    const hull = state.hulls.find((x) => x.id === Number(refs.hull.value));
-    const described = describeTag(refs.tag.value);
-    tagField.hint.textContent = described || 'Area code plus three digits, like EA500';
-    refs.name.placeholder = type === 'GRAND_BLOCK' && hull && described
-      ? `Leave blank to use ${hull.code}-${refs.tag.value.trim().toUpperCase()}`
-      : 'Unique name, like S041-EA510';
+  const selected = () => planned.get(refs.item.value.trim().toUpperCase()) || null;
+
+  const loadPlanned = async () => {
+    refs.item.disabled = true;
+    itemField.hint.textContent = 'Loading the plan';
+    try {
+      const list = await api.get(`/items?status=PLANNED&hullId=${refs.hull.value}`);
+      planned = new Map(list.map((i) => [i.name.toUpperCase(), i]));
+      datalist.replaceChildren(...list.map((i) => h('option', { value: i.name }, `${i.levelLabel}: ${i.function || ''}`)));
+      itemField.hint.textContent = list.length
+        ? `${list.length} planned items left for this hull. Type a name or pick from the list.`
+        : 'Everything for this hull is already on the yard or built into something else.';
+    } catch (err) {
+      itemField.hint.textContent = err.message;
+    } finally {
+      refs.item.disabled = false;
+    }
   };
-  for (const control of [refs.type, refs.hull, refs.tag]) control.addEventListener('input', sync);
-  sync();
+
+  const describeSelection = () => {
+    const item = selected();
+    if (!item) return;
+    const zoneId = defaultZoneId(item);
+    if (zoneId && !refs.zone.value) refs.zone.value = String(zoneId);
+    itemField.hint.textContent = [item.levelLabel, item.areaName, item.function, `phase ${item.phaseNumber} ${item.phaseName}`]
+      .filter(Boolean).join(' · ');
+  };
+
+  refs.hull.addEventListener('input', () => { refs.item.value = ''; refs.zone.value = ''; loadPlanned(); });
+  refs.item.addEventListener('input', describeSelection);
+  loadPlanned();
 
   const content = h('div', { class: 'form' },
-    field('Type', refs.type).node,
-    nameField.node,
-    h('div', { class: 'field-row' }, field('Hull', refs.hull).node, field('Zone', refs.zone).node),
-    tagField.node,
-    qtyRow,
-    field('Specs', refs.specs, 'One per line, like Weight (t): 92.5').node,
+    field('Hull', refs.hull).node,
+    itemField.node,
+    datalist,
+    field('Zone', refs.zone, 'Starts with the zone for its first phase when there is one').node,
     field('Note', refs.note).node);
 
   openDialog({
-    title: 'Add item',
-    submitLabel: 'Add item',
+    title: 'Place item on the yard',
+    submitLabel: 'Place item',
     content,
     onSubmit: async () => {
-      const created = await api.post('/items', {
-        name: refs.name.value,
-        type: refs.type.value,
-        hullId: refs.hull.value ? Number(refs.hull.value) : null,
+      const item = selected();
+      if (!item) throw new Error('Choose one of the planned items for this hull.');
+      const placed = await api.post(`/items/${item.id}/place`, {
         zoneId: refs.zone.value ? Number(refs.zone.value) : null,
-        tag: refs.tag.value,
-        quantity: isBatch() && refs.quantity.value ? Number(refs.quantity.value) : null,
-        unit: isBatch() ? refs.unit.value : null,
-        specs: parseSpecs(refs.specs.value),
         note: refs.note.value,
       });
-      toast(`Added ${created.name}`);
-      emit('items-mutated', { id: created.id, open: true });
+      toast(`Placed ${placed.name}`);
+      emit('items-mutated', { id: placed.id, open: true });
     },
   });
 }
 
 // ---------------------------------------------------------------- assemble
 
-const RANK = { PIPE_OUTFITTING: 0, SUB_ASSEMBLY: 1, SECTION: 2, UNIT: 2, BLOCK: 3, GRAND_BLOCK: 4 };
-const NEXT_UP = ['UNIT', 'SECTION', 'BLOCK', 'GRAND_BLOCK', 'GRAND_BLOCK'];
-
-/** Guess what the assembly becomes: sub-assemblies make a section, sections make a block, and so on. */
-function suggestType(children) {
-  const top = Math.max(...children.map((c) => RANK[c.type] ?? 0));
-  return NEXT_UP[top];
-}
-
+/**
+ * Joins the selected pieces into their planned parent. The server checks that they are all the pieces of one block
+ * or unit and tells the user which ones are missing, so this form only collects the zone and a note.
+ */
 export function openAssemble(ids) {
   const children = ids.map((id) => state.items.find((i) => i.id === id)).filter(Boolean);
-  const hullIds = new Set(children.map((c) => c.hullId).filter((x) => x !== null && x !== undefined));
-  const hull = hullIds.size === 1 ? state.hulls.find((x) => x.id === [...hullIds][0]) : null;
+  const parents = new Set(children.map((c) => c.parentName).filter(Boolean));
+  const parentName = parents.size === 1 ? [...parents][0] : null;
 
   const refs = {
-    name: h('input', { type: 'text', maxlength: 120, placeholder: hull ? `Unique name, like ${hull.code}-EA510` : 'Unique name' }),
-    type: typeSelect(suggestType(children), (t) => t.batch || t.code === 'TOOL'),
-    tag: h('input', { type: 'text', maxlength: 5, placeholder: 'EA500', autocapitalize: 'characters' }),
     zone: zoneSelect(children[0] ? children[0].zoneId : null),
-    specs: h('textarea', { rows: 3, spellcheck: 'false', placeholder: 'Weight (t): 410' }),
     note: h('input', { type: 'text', maxlength: 300, placeholder: 'Optional' }),
   };
-  const tagField = field('Area tag', refs.tag, 'Area code plus three digits, like EA500');
-  const sync = () => {
-    tagField.node.hidden = refs.type.value !== 'GRAND_BLOCK';
-    const described = describeTag(refs.tag.value);
-    tagField.hint.textContent = described || 'Area code plus three digits, like EA500';
-    refs.name.placeholder = refs.type.value === 'GRAND_BLOCK' && hull && described
-      ? `Leave blank to use ${hull.code}-${refs.tag.value.trim().toUpperCase()}`
-      : (hull ? `Unique name, like ${hull.code}-EA510` : 'Unique name');
-  };
-  refs.type.addEventListener('input', sync);
-  refs.tag.addEventListener('input', sync);
-  sync();
 
   const content = h('div', { class: 'form' },
-    h('p', { class: 'lead' }, `Joining ${children.length} items. They will leave the map and stay listed under the new item's Children tab.`),
+    h('p', { class: 'lead' }, parentName
+      ? `Joining ${children.length} items into ${parentName}. They will leave the map and stay listed under its Children tab.`
+      : `Joining ${children.length} items.`),
     h('ul', { class: 'chips' }, children.map((c) => h('li', { class: 'chip' }, c.name))),
-    hullIds.size > 1 ? h('p', { class: 'msg msg-error' }, 'These items belong to different hulls. Only items from the same hull can be assembled together.') : null,
-    field('New item name', refs.name).node,
-    h('div', { class: 'field-row' }, field('Becomes', refs.type).node, field('Place in', refs.zone).node),
-    tagField.node,
-    field('Specs', refs.specs, 'One per line, like Weight (t): 92.5').node,
+    parents.size > 1
+      ? h('p', { class: 'msg msg-error' }, `These items belong to different parents (${[...parents].join(', ')}). Pick the pieces of one block or unit at a time.`)
+      : null,
+    field('Place the result in', refs.zone).node,
     field('Note', refs.note).node);
 
   openDialog({
     title: 'Assemble',
-    submitLabel: 'Create assembly',
+    submitLabel: 'Assemble',
     content,
     onSubmit: async () => {
       const created = await api.post('/items/assemble', {
         childIds: ids,
-        name: refs.name.value,
-        type: refs.type.value,
-        tag: refs.tag.value,
         zoneId: refs.zone.value ? Number(refs.zone.value) : null,
-        specs: parseSpecs(refs.specs.value),
         note: refs.note.value,
       });
-      toast(`Created ${created.name} from ${children.length} items`);
+      toast(`Built ${created.name} from ${children.length} items`);
       emit('items-mutated', { id: created.id, open: true, endAssemble: true });
     },
   });

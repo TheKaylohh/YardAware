@@ -3,13 +3,18 @@
 // To use a real aerial photo or site plan later, replace /img/yard.svg and redraw the zone points.
 
 import { state, emit } from './state.js';
-import { s, clear, NEUTRAL_OUTLINE, TYPE_CODES } from './util.js';
+import { s, clear, NEUTRAL_OUTLINE, LEVEL_CODES } from './util.js';
 
-const MAP_W = 1600;
-const MAP_H = 1000;
+const MAP_W = 1800;
+const MAP_H = 1500;
 const CELL_W = 68;
 const CELL_H = 72;
 const TILE = 40;
+const ZONE_PAD = 8;
+const ZONE_HEAD = 34;
+const ZONE_FOOT = 20;
+const MIN_SCALE = 0.55;
+const LABEL_SCALE = 0.8;
 const MIN_VIEW_W = 300;
 const DRAG_THRESHOLD_PX = 5;
 
@@ -195,7 +200,7 @@ function clearDropZone() {
 // ----------------------------------------------------------------- items
 
 function isHidden(item) {
-  return state.hiddenHulls.has(item.hullId ?? 'none');
+  return state.hiddenHulls.has(item.hullId);
 }
 
 export function renderItems() {
@@ -209,16 +214,34 @@ export function renderItems() {
   for (const [zoneId, list] of byZone) {
     const { bbox } = zoneGeometry.get(zoneId);
     list.sort((a, b) => a.name.localeCompare(b.name));
-    const cols = Math.max(1, Math.floor((bbox.maxX - bbox.minX - 20) / CELL_W));
+    const layout = fitTiles(list.length, bbox.maxX - bbox.minX, bbox.maxY - bbox.minY);
     list.forEach((item, index) => {
-      const cx = bbox.minX + 10 + (index % cols) * CELL_W + CELL_W / 2;
-      const cy = bbox.minY + 46 + Math.floor(index / cols) * CELL_H + TILE / 2;
-      itemLayer.append(buildItem(item, cx, cy));
+      const cx = bbox.minX + ZONE_PAD + (index % layout.cols) * layout.cellW + layout.cellW / 2;
+      const cy = bbox.minY + ZONE_HEAD + Math.floor(index / layout.cols) * layout.cellH + 20 * layout.scale;
+      itemLayer.append(buildItem(item, cx, cy, layout.scale, layout.labelled));
     });
   }
   updateZoneCounts();
   applySearch();
   syncPinned();
+}
+
+/**
+ * Busy zones shrink their tiles so everything stays inside the outline: the biggest scale (1 down to MIN_SCALE) at
+ * which all n tiles fit. Small tiles drop the label under them; the tooltip and the panel still name the item.
+ */
+function fitTiles(n, width, height) {
+  let layout;
+  for (let scale = 1; scale >= MIN_SCALE - 0.001; scale -= 0.05) {
+    const labelled = scale >= LABEL_SCALE;
+    const cellW = labelled ? CELL_W * scale : (TILE + 8) * scale;
+    const cellH = labelled ? CELL_H * scale : (TILE + 8) * scale;
+    const cols = Math.max(1, Math.floor((width - 2 * ZONE_PAD) / cellW));
+    const rows = Math.max(1, Math.floor((height - ZONE_HEAD - ZONE_FOOT) / cellH));
+    layout = { scale, labelled, cellW, cellH, cols };
+    if (cols * rows >= n) break;
+  }
+  return layout;
 }
 
 function updateZoneCounts() {
@@ -230,39 +253,38 @@ function updateZoneCounts() {
   });
 }
 
-/** Names start with the ship code when the item has a hull; the outline colour already says which ship. */
+/** The plan code without the ship prefix (the outline colour says which ship); long codes keep their specific end. */
 function shortLabel(item) {
-  let label = item.name;
-  if (item.hullCode && label.startsWith(`${item.hullCode}-`)) label = label.slice(item.hullCode.length + 1);
-  return label.length > 13 ? `${label.slice(0, 12)}…` : label;
+  const label = item.nodeCode;
+  return label.length > 13 ? `…${label.slice(-12)}` : label;
 }
 
-function buildItem(item, cx, cy) {
+function buildItem(item, cx, cy, scale = 1, labelled = true) {
   const outline = item.hullColor || NEUTRAL_OUTLINE;
   const g = s('g', {
     class: 'item',
     tabindex: 0,
     role: 'button',
-    transform: `translate(${cx} ${cy})`,
+    transform: `translate(${cx} ${cy}) scale(${scale})`,
     'data-id': item.id,
-    'aria-label': `${item.name}, ${item.typeLabel}, in ${item.zoneName}`,
+    'aria-label': `${item.name}, ${item.levelLabel}, phase ${item.phaseNumber} ${item.phaseName}, in ${item.zoneName}`,
   },
+  s('title', {}, `${item.name}, ${item.levelLabel}. Phase ${item.phaseNumber}: ${item.phaseName}. ${item.zoneName}`),
   s('rect', { class: 'item-halo', x: -27, y: -27, width: 54, height: 54, rx: 10 }),
   s('rect', {
     class: 'item-tile', x: -20, y: -20, width: TILE, height: TILE, rx: 6,
-    stroke: outline, 'stroke-dasharray': item.hullColor ? null : '6 4',
+    stroke: outline,
   }),
-  s('text', { class: 'item-code', 'text-anchor': 'middle', dy: '.35em' }, TYPE_CODES[item.type] || '?'),
-  s('text', { class: 'item-label', y: 37, 'text-anchor': 'middle' }, shortLabel(item)));
-  g.__pos = { cx, cy };
+  s('text', { class: 'item-code', 'text-anchor': 'middle', dy: '.35em' }, LEVEL_CODES[item.level] || '?'),
+  labelled ? s('text', { class: 'item-label', y: 37, 'text-anchor': 'middle' }, shortLabel(item)) : null);
+  g.__pos = { cx, cy, scale };
 
-  if (item.batch && item.quantity != null) {
-    const text = String(item.quantity);
-    const width = 14 + text.length * 7;
-    g.append(s('g', { class: 'item-badge', transform: 'translate(17 -21)' },
-      s('rect', { x: -width / 2, y: -8, width, height: 16, rx: 8 }),
-      s('text', { 'text-anchor': 'middle', dy: '.35em' }, text)));
-  }
+  // The badge is the production phase (1-11) the item is in now.
+  const phaseText = String(item.phaseNumber);
+  const badgeWidth = 14 + phaseText.length * 7;
+  g.append(s('g', { class: 'item-badge', transform: 'translate(17 -21)' },
+    s('rect', { x: -badgeWidth / 2, y: -8, width: badgeWidth, height: 16, rx: 8 }),
+    s('text', { 'text-anchor': 'middle', dy: '.35em' }, phaseText)));
   g.append(s('g', { class: 'pick-mark', transform: 'translate(-17 -17)' },
     s('circle', { r: 9 }),
     s('path', { d: 'M-4,0 L-1,3.5 L4.5,-3', fill: 'none' })));
@@ -302,7 +324,7 @@ function startItemPointer(e, item, g) {
     }
     if (dragging) {
       const p = toSvg(ev);
-      g.setAttribute('transform', `translate(${p.x} ${p.y})`);
+      g.setAttribute('transform', `translate(${p.x} ${p.y}) scale(${g.__pos.scale})`);
       highlightDropZone(p);
     }
   };
@@ -322,7 +344,7 @@ function startItemPointer(e, item, g) {
     if (zone && zone.id !== item.zoneId) {
       emit('item-move', { item, zone });
     } else {
-      g.setAttribute('transform', `translate(${g.__pos.cx} ${g.__pos.cy})`); // snap back
+      g.setAttribute('transform', `translate(${g.__pos.cx} ${g.__pos.cy}) scale(${g.__pos.scale})`); // snap back
     }
   };
   g.addEventListener('pointermove', move);
@@ -346,7 +368,8 @@ export function syncPicks() {
 }
 
 function matches(item, q) {
-  return [item.name, item.tag, item.tagDescription, item.typeLabel, item.hullCode, item.zoneName]
+  return [item.name, item.nodeCode, item.areaCode, item.areaName, item.levelLabel, item.hullCode, item.zoneName,
+    item.phaseName, item.function, item.side]
     .filter(Boolean)
     .some((value) => value.toLowerCase().includes(q));
 }

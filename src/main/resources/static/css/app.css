@@ -145,7 +145,7 @@ body[data-mode="edit"] .zone-shape { stroke-dasharray: 9 5; }
   stroke-linejoin: round;
   pointer-events: none;
 }
-.zone-name { font-size: 15px; font-weight: 700; fill: var(--ink); }
+.zone-name { font-size: 13px; font-weight: 700; fill: var(--ink); }
 .zone-count { font-size: 12px; fill: var(--ink-2); }
 .zone.drop .zone-shape { fill: rgba(245, 184, 0, .28); stroke: #B98A00; stroke-width: 3; stroke-dasharray: none; }
 

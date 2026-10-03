@@ -1,0 +1,93 @@
+[
+ {
+  "code": "SP",
+  "name": "Steel Stockyard",
+  "kind": "yard",
+  "facility": null,
+  "points": "308,103 465,103 465,308 308,308"
+ },
+ {
+  "code": "PL",
+  "name": "Panel Line",
+  "kind": "shop",
+  "facility": "A0 / B0 / C0",
+  "points": "465,43 1255,43 1255,406 465,406"
+ },
+ {
+  "code": "PS",
+  "name": "Pipe Shop",
+  "kind": "shop",
+  "facility": null,
+  "points": "1325,535 1525,535 1525,757 1325,757"
+ },
+ {
+  "code": "OS",
+  "name": "Outfitting Shop",
+  "kind": "shop",
+  "facility": null,
+  "points": "1514,427 1790,427 1790,882 1514,882"
+ },
+ {
+  "code": "AH",
+  "name": "Assembly Hall",
+  "kind": "shop",
+  "facility": "D0 / E0 / F0",
+  "points": "1065,476 1222,476 1222,736 1065,736"
+ },
+ {
+  "code": "BP",
+  "name": "Blast & Paint",
+  "kind": "shop",
+  "facility": "Paint shop / dock",
+  "points": "1087,746 1293,746 1293,1022 1087,1022"
+ },
+ {
+  "code": "BD1",
+  "name": "Building Dock 1",
+  "kind": "dock",
+  "facility": "L0 / M0 + dockside",
+  "points": "457,625 609,625 609,1437 457,1437"
+ },
+ {
+  "code": "BD2",
+  "name": "Building Dock 2",
+  "kind": "dock",
+  "facility": "L0 / M0 + dockside",
+  "points": "624,625 776,625 776,1437 624,1437"
+ },
+ {
+  "code": "LY1",
+  "name": "Laydown 1",
+  "kind": "yard",
+  "facility": null,
+  "points": "362,622 455,622 455,1222 362,1222"
+ },
+ {
+  "code": "GBY",
+  "name": "Grand Block Yard",
+  "kind": "yard",
+  "facility": "L0 / M0",
+  "points": "790,779 1033,779 1033,1244 790,1244"
+ },
+ {
+  "code": "LY2",
+  "name": "Laydown 2",
+  "kind": "yard",
+  "facility": null,
+  "points": "573,476 968,476 968,617 573,617"
+ },
+ {
+  "code": "POL",
+  "name": "Outfit Laydown",
+  "kind": "yard",
+  "facility": null,
+  "points": "1055,1039 1336,1039 1336,1401 1055,1401"
+ },
+ {
+  "code": "PIER",
+  "name": "Pier",
+  "kind": "pier",
+  "facility": "H0",
+  "points": "1698,1136 1790,1136 1790,1487 1698,1487"
+ }
+]

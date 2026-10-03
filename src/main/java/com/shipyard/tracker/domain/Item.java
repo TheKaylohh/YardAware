@@ -7,56 +7,58 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.GeneratedValue;
 import jakarta.persistence.GenerationType;
 import jakarta.persistence.Id;
+import jakarta.persistence.Index;
+import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.Table;
+import jakarta.persistence.UniqueConstraint;
 import jakarta.persistence.Version;
 import java.time.Instant;
 import org.hibernate.annotations.ColumnDefault;
 
 /**
- * Anything tracked on the yard: a piece of a ship, a batch of pipes, or a large tool.
- * When items are assembled into a bigger item, the pieces become CONSUMED and point at their parent.
+ * A hull's copy of one tracked node of the hierarchy: "unit BA-U01 of hull S041".
+ * The structure (what it is, which area, band, side, phase route, parent) comes from the {@link HierarchyNode};
+ * the item only carries what changes: status, location, current phase and specs.
  */
 @Entity
-@Table(name = "items")
+@Table(name = "items",
+        uniqueConstraints = @UniqueConstraint(name = "uk_item_hull_node", columnNames = {"hull_id", "node_id"}),
+        indexes = {@Index(name = "idx_item_status", columnList = "status"), @Index(name = "idx_item_parent", columnList = "parent_id")})
 public class Item {
 
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
     private Long id;
 
-    /** Unique, human-meaningful name that doubles as the ID, e.g. S041-EA500. */
+    /** Hull code plus node code, e.g. S041-BA-U01-B02. Unique. */
     @Column(nullable = false, unique = true)
     private String name;
 
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private ItemType type;
-
-    @Enumerated(EnumType.STRING)
-    @Column(nullable = false)
-    private ItemStatus status = ItemStatus.ACTIVE;
-
-    /** Ship this item belongs to. Null for tools and other unassigned items. */
-    @ManyToOne
+    @ManyToOne(optional = false)
     private Hull hull;
 
-    /** Current location. For consumed items this is where they were when they were assembled. */
-    @ManyToOne
-    private Zone zone;
+    @ManyToOne(optional = false)
+    private HierarchyNode node;
 
-    /** The item this one was assembled into. Null while the item is still standalone. */
+    /** This hull's item for the node's parent (section -> block -> unit). Fixed by the plan. Null for units. */
     @ManyToOne
     private Item parent;
 
-    /** Area tag for grand blocks, e.g. EA500. */
-    private String tag;
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false)
+    private ItemStatus status = ItemStatus.PLANNED;
 
-    /** Only used by batch types. */
-    private Integer quantity;
-    private String unit;
+    /** Current location. Null while PLANNED. For consumed items this is where they were when joined. */
+    @ManyToOne
+    private Zone zone;
 
-    /** Flexible specs (weight, dimensions, drawing number...) stored as a JSON object. */
+    /** Production phase the item is in now. Starts at the first phase of the node's route. */
+    @ManyToOne(optional = false)
+    @JoinColumn(name = "phase_id")
+    private Phase phase;
+
+    /** Flexible specs (weight, drawing number ...) stored as a JSON object. */
     @Column(length = 4000)
     private String specs;
 
@@ -76,22 +78,18 @@ public class Item {
     public Long getId() { return id; }
     public String getName() { return name; }
     public void setName(String name) { this.name = name; }
-    public ItemType getType() { return type; }
-    public void setType(ItemType type) { this.type = type; }
-    public ItemStatus getStatus() { return status; }
-    public void setStatus(ItemStatus status) { this.status = status; }
     public Hull getHull() { return hull; }
     public void setHull(Hull hull) { this.hull = hull; }
-    public Zone getZone() { return zone; }
-    public void setZone(Zone zone) { this.zone = zone; }
+    public HierarchyNode getNode() { return node; }
+    public void setNode(HierarchyNode node) { this.node = node; }
     public Item getParent() { return parent; }
     public void setParent(Item parent) { this.parent = parent; }
-    public String getTag() { return tag; }
-    public void setTag(String tag) { this.tag = tag; }
-    public Integer getQuantity() { return quantity; }
-    public void setQuantity(Integer quantity) { this.quantity = quantity; }
-    public String getUnit() { return unit; }
-    public void setUnit(String unit) { this.unit = unit; }
+    public ItemStatus getStatus() { return status; }
+    public void setStatus(ItemStatus status) { this.status = status; }
+    public Zone getZone() { return zone; }
+    public void setZone(Zone zone) { this.zone = zone; }
+    public Phase getPhase() { return phase; }
+    public void setPhase(Phase phase) { this.phase = phase; }
     public String getSpecs() { return specs; }
     public void setSpecs(String specs) { this.specs = specs; }
     public Instant getCreatedAt() { return createdAt; }
