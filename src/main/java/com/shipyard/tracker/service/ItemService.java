@@ -1,8 +1,5 @@
 package com.shipyard.tracker.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shipyard.tracker.domain.Activity;
 import com.shipyard.tracker.domain.ActivityType;
 import com.shipyard.tracker.domain.Area;
@@ -37,6 +34,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * All business rules for items live here so the controller stays thin and the rules are testable.
@@ -395,7 +395,7 @@ public class ItemService {
                 throw bad("The specs are too long. Keep them under " + MAX_SPECS_LENGTH + " characters.");
             }
             return json;
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw bad("The specs couldn't be saved: " + e.getOriginalMessage());
         }
     }
@@ -406,7 +406,7 @@ public class ItemService {
         }
         try {
             return mapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() { });
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             return Map.of();
         }
     }

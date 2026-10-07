@@ -1,8 +1,5 @@
 package com.shipyard.tracker.service;
 
-import com.fasterxml.jackson.core.JsonProcessingException;
-import com.fasterxml.jackson.core.type.TypeReference;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shipyard.tracker.domain.Item;
 import com.shipyard.tracker.domain.ItemStatus;
 import com.shipyard.tracker.domain.Zone;
@@ -33,6 +30,9 @@ import org.springframework.http.HttpStatus;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.support.TransactionTemplate;
 import org.springframework.web.server.ResponseStatusException;
+import tools.jackson.core.JacksonException;
+import tools.jackson.core.type.TypeReference;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Changes many items at once, for the data grid and the Excel import. A row says where an item should be (zone), which
@@ -289,7 +289,7 @@ public class BulkItemService {
                 throw new IllegalArgumentException("Specs must be a JSON object like {\"Weight (t)\": 92.5}. Write {} to clear them.");
             }
             return parsed;
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             throw new IllegalArgumentException("Specs must be a JSON object like {\"Weight (t)\": 92.5}. Write {} to clear them.");
         }
     }
@@ -300,7 +300,7 @@ public class BulkItemService {
         }
         try {
             return mapper.readValue(json, new TypeReference<LinkedHashMap<String, Object>>() { });
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             return new LinkedHashMap<>();
         }
     }
@@ -308,7 +308,7 @@ public class BulkItemService {
     private String json(Map<String, Object> specs) {
         try {
             return mapper.writeValueAsString(specs);
-        } catch (JsonProcessingException e) {
+        } catch (JacksonException e) {
             return "{}";
         }
     }

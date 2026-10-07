@@ -1,7 +1,5 @@
 package com.shipyard.tracker.security;
 
-import static org.springframework.security.web.util.matcher.AntPathRequestMatcher.antMatcher;
-
 import jakarta.servlet.Filter;
 import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
@@ -20,6 +18,7 @@ import org.springframework.security.web.header.writers.DelegatingRequestMatcherH
 import org.springframework.security.web.header.writers.ReferrerPolicyHeaderWriter;
 import org.springframework.security.web.header.writers.StaticHeadersWriter;
 import org.springframework.security.web.header.writers.frameoptions.XFrameOptionsHeaderWriter;
+import org.springframework.security.web.servlet.util.matcher.PathPatternRequestMatcher;
 import org.springframework.security.web.util.matcher.NegatedRequestMatcher;
 import org.springframework.security.web.util.matcher.RequestMatcher;
 
@@ -37,8 +36,18 @@ final class SecuritySupport {
 
     private static final String[] READ_ROLES = {AppRoles.VIEWER, AppRoles.EDITOR, AppRoles.ADMIN};
     private static final long ONE_YEAR_SECONDS = 31_536_000L;
+    // AntPathRequestMatcher is gone in Spring Security 7; PathPatternRequestMatcher is the replacement.
+    private static final PathPatternRequestMatcher.Builder PATH = PathPatternRequestMatcher.withDefaults();
 
     private SecuritySupport() {
+    }
+
+    private static RequestMatcher matcher(String pattern) {
+        return PATH.matcher(pattern);
+    }
+
+    private static RequestMatcher matcher(HttpMethod method, String pattern) {
+        return PATH.matcher(method, pattern);
     }
 
     static SecurityFilterChain apiChain(HttpSecurity http, boolean allowHttpBasic, SecuritySettings settings) throws Exception {
@@ -54,13 +63,13 @@ final class SecuritySupport {
             return header != null && header.regionMatches(true, 0, "Basic ", 0, 6);
         };
 
-        http.securityMatcher(antMatcher("/api/**"))
+        http.securityMatcher(matcher("/api/**"))
                 .authorizeHttpRequests(auth -> {
                     // The Admin page's API: administrators only, for reading as well as writing.
-                    auth.requestMatchers(antMatcher("/api/admin/**")).hasRole(AppRoles.ADMIN);
-                    readAccess(auth.requestMatchers(antMatcher(HttpMethod.GET, "/api/**"), antMatcher(HttpMethod.HEAD, "/api/**")), settings);
+                    auth.requestMatchers(matcher("/api/admin/**")).hasRole(AppRoles.ADMIN);
+                    readAccess(auth.requestMatchers(matcher(HttpMethod.GET, "/api/**"), matcher(HttpMethod.HEAD, "/api/**")), settings);
                     // Creating a ship generates hundreds of records, so it is not an everyday editor action.
-                    auth.requestMatchers(antMatcher(HttpMethod.POST, "/api/hulls")).hasRole(AppRoles.ADMIN);
+                    auth.requestMatchers(matcher(HttpMethod.POST, "/api/hulls")).hasRole(AppRoles.ADMIN);
                     auth.anyRequest().hasAnyRole(AppRoles.EDITOR, AppRoles.ADMIN);
                 })
                 .csrf(csrf -> {
@@ -90,17 +99,17 @@ final class SecuritySupport {
 
     static void configureWeb(HttpSecurity http, String h2ConsolePath, SecuritySettings settings, Filter roleRefresh)
             throws Exception {
-        RequestMatcher h2Console = antMatcher(h2ConsolePath + "/**");
+        RequestMatcher h2Console = matcher(h2ConsolePath + "/**");
         RequestMatcher notH2Console = new NegatedRequestMatcher(h2Console);
         http.authorizeHttpRequests(auth -> {
                     // Error pages must stay reachable or Spring Security hides the real error behind a login redirect.
-                    auth.requestMatchers(antMatcher("/error")).permitAll();
+                    auth.requestMatchers(matcher("/error")).permitAll();
                     // Health probes for the load balancer / orchestrator. Only status is exposed (no details).
-                    auth.requestMatchers(antMatcher("/actuator/health"), antMatcher("/actuator/health/**")).permitAll();
+                    auth.requestMatchers(matcher("/actuator/health"), matcher("/actuator/health/**")).permitAll();
                     auth.requestMatchers(h2Console).hasRole(AppRoles.ADMIN);
                     // Pages that only make sense with more than read access (the APIs behind them enforce it as well).
-                    auth.requestMatchers(antMatcher("/admin.html")).hasRole(AppRoles.ADMIN);
-                    auth.requestMatchers(antMatcher("/import.html")).hasAnyRole(AppRoles.EDITOR, AppRoles.ADMIN);
+                    auth.requestMatchers(matcher("/admin.html")).hasRole(AppRoles.ADMIN);
+                    auth.requestMatchers(matcher("/import.html")).hasAnyRole(AppRoles.EDITOR, AppRoles.ADMIN);
                     readAccess(auth.anyRequest(), settings);
                 })
                 .csrf(csrf -> {

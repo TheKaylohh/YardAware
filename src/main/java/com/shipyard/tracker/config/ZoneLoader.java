@@ -1,6 +1,5 @@
 package com.shipyard.tracker.config;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shipyard.tracker.domain.Zone;
 import com.shipyard.tracker.repo.ZoneRepository;
 import java.io.IOException;
@@ -12,6 +11,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Loads the yard's zones (the outlines on the map) on first start, in every environment, production included.

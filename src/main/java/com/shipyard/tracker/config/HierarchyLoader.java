@@ -1,7 +1,6 @@
 package com.shipyard.tracker.config;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shipyard.tracker.domain.Area;
 import com.shipyard.tracker.domain.DesignBasis;
 import com.shipyard.tracker.domain.HierarchyNode;
@@ -23,6 +22,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Loads the production plan into H2 on first start: the 11 phases, the areas, the whole hierarchy and the design basis.

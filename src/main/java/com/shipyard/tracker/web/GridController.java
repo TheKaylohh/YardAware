@@ -25,10 +25,7 @@ import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 import org.springframework.web.server.ResponseStatusException;
 
-/**
- * The data grid, the Excel export and the Excel import. Reading needs a signed-in viewer; every POST needs an editor
- * (see SecuritySupport).
- */
+
 @RestController
 @RequestMapping("/api")
 public class GridController {
@@ -43,19 +40,16 @@ public class GridController {
         this.bulk = bulk;
     }
 
-    /** Every item, whatever its status, in the shape the data grid shows. */
     @GetMapping("/grid/items")
     public List<GridRow> rows() {
         return grid.rows();
     }
 
-    /** Dry run: what would these edits do? Saves nothing. */
     @PostMapping("/grid/items/check")
     public BulkReport check(@RequestBody BulkRequest request) {
         return bulk.check(withSource(request, "Bulk edit in the data grid"));
     }
 
-    /** Saves the edits when every row is fine (or when skipErrors is set, the rows that are). */
     @PostMapping("/grid/items/save")
     public BulkReport save(@RequestBody BulkRequest request) {
         return bulk.save(withSource(request, "Bulk edit in the data grid"));
@@ -71,10 +65,6 @@ public class GridController {
                 .body(data);
     }
 
-    /**
-     * Reads an uploaded item sheet. Without {@code apply} it only reports what would change; with it, the changes are
-     * saved (all or nothing, see BulkItemService). The browser sends the same file for both steps.
-     */
     @PostMapping(value = "/import/items", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
     public BulkReport importItems(@RequestParam("file") MultipartFile file,
                                   @RequestParam(name = "apply", defaultValue = "false") boolean apply,

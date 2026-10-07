@@ -5,8 +5,6 @@ import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertNotNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-import com.fasterxml.jackson.databind.JsonNode;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.util.ArrayList;
@@ -17,8 +15,9 @@ import org.apache.poi.ss.usermodel.Sheet;
 import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import org.junit.jupiter.api.Test;
 import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.resttestclient.TestRestTemplate;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureTestRestTemplate;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
 import org.springframework.core.io.ByteArrayResource;
 import org.springframework.http.HttpEntity;
 import org.springframework.http.HttpHeaders;
@@ -28,6 +27,8 @@ import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.ActiveProfiles;
 import org.springframework.util.LinkedMultiValueMap;
 import org.springframework.util.MultiValueMap;
+import tools.jackson.databind.JsonNode;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * The Home, Data, Import and Admin pages talk to these endpoints. Goes through real HTTP with the demo users from
@@ -37,6 +38,7 @@ import org.springframework.util.MultiValueMap;
  * any particular order.
  */
 @ActiveProfiles("dev")
+@AutoConfigureTestRestTemplate
 @SpringBootTest(
         webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT,
         properties = "spring.datasource.url=jdbc:h2:mem:pagestest;DB_CLOSE_DELAY=-1")
@@ -85,7 +87,7 @@ class PagesApiTest {
     private List<JsonNode> plannedTopLevel() throws IOException {
         List<JsonNode> found = new ArrayList<>();
         for (JsonNode row : get(viewer(), "/api/grid/items")) {
-            if ("PLANNED".equals(row.get("status").asText()) && row.get("parent").asText().isEmpty()) {
+            if ("PLANNED".equals(row.get("status").asString()) && row.get("parent").asString().isEmpty()) {
                 found.add(row);
             }
         }
@@ -95,7 +97,7 @@ class PagesApiTest {
 
     private JsonNode gridRow(String name) throws IOException {
         for (JsonNode row : get(viewer(), "/api/grid/items")) {
-            if (name.equals(row.get("name").asText())) {
+            if (name.equals(row.get("name").asString())) {
                 return row;
             }
         }
@@ -103,7 +105,7 @@ class PagesApiTest {
     }
 
     private String aZoneCode() throws IOException {
-        return get(viewer(), "/api/zones").get(0).get("code").asText();
+        return get(viewer(), "/api/zones").get(0).get("code").asString();
     }
 
     @SafeVarargs
@@ -112,7 +114,7 @@ class PagesApiTest {
     }
 
     private static Map<String, Object> zoneRow(int number, JsonNode item, String zone) {
-        return Map.of("row", number, "name", item.get("name").asText(), "version", item.get("version").asText(), "zone", zone);
+        return Map.of("row", number, "name", item.get("name").asString(), "version", item.get("version").asString(), "zone", zone);
     }
 
     // ---------------------------------------------------------------- summary
@@ -150,13 +152,13 @@ class PagesApiTest {
         Map<String, Object> request = bulk(List.of("zone"), false, zoneRow(1, planned, aZoneCode()));
         assertEquals(403, postJson(viewer(), "/api/grid/items/check", request).getStatusCode().value());
         assertEquals(403, postJson(viewer(), "/api/grid/items/save", request).getStatusCode().value());
-        assertEquals("PLANNED", gridRow(planned.get("name").asText()).get("status").asText());
+        assertEquals("PLANNED", gridRow(planned.get("name").asString()).get("status").asString());
     }
 
     @Test
     void checkChangesNothingAndSaveAppliesTheRowWithAHistoryEntry() throws Exception {
         JsonNode planned = plannedTopLevel().get(0);
-        String name = planned.get("name").asText();
+        String name = planned.get("name").asString();
         String zone = aZoneCode();
         Map<String, Object> request = bulk(List.of("zone"), false, zoneRow(1, planned, zone));
 
@@ -165,19 +167,19 @@ class PagesApiTest {
         JsonNode report = json(checked);
         assertFalse(report.get("applied").asBoolean());
         assertEquals(1, report.get("changed").asInt());
-        assertEquals("CHANGE", report.get("rows").get(0).get("outcome").asText());
-        assertEquals("PLANNED", gridRow(name).get("status").asText(), "a check saves nothing");
+        assertEquals("CHANGE", report.get("rows").get(0).get("outcome").asString());
+        assertEquals("PLANNED", gridRow(name).get("status").asString(), "a check saves nothing");
 
         ResponseEntity<String> saved = postJson(editor(), "/api/grid/items/save", request);
         assertEquals(200, saved.getStatusCode().value(), saved.getBody());
         assertTrue(json(saved).get("applied").asBoolean());
 
         JsonNode after = gridRow(name);
-        assertEquals("ACTIVE", after.get("status").asText());
-        assertEquals(zone, after.get("zone").asText());
+        assertEquals("ACTIVE", after.get("status").asString());
+        assertEquals(zone, after.get("zone").asString());
         assertEquals(planned.get("version").asLong() + 1, after.get("version").asLong(), "the item version moves on");
 
-        String history = get(viewer(), "/api/items/" + after.get("id").asText() + "/activity").toString();
+        String history = get(viewer(), "/api/items/" + after.get("id").asString() + "/activity").toString();
         assertTrue(history.contains("Test edit"), history);
         assertTrue(history.contains("Eddie Editor"), "the history names the signed-in person: " + history);
     }
@@ -185,11 +187,11 @@ class PagesApiTest {
     @Test
     void aStaleVersionIsRefusedInsteadOfOverwritingNewerWork() throws Exception {
         JsonNode planned = plannedTopLevel().get(0);
-        Map<String, Object> stale = Map.of("row", 1, "name", planned.get("name").asText(),
+        Map<String, Object> stale = Map.of("row", 1, "name", planned.get("name").asString(),
                 "version", String.valueOf(planned.get("version").asLong() + 7), "zone", aZoneCode());
         JsonNode report = json(postJson(editor(), "/api/grid/items/check", bulk(List.of("zone"), false, stale)));
         assertEquals(1, report.get("errors").asInt());
-        assertTrue(report.get("rows").get(0).get("message").asText().contains("Someone changed"), report.toString());
+        assertTrue(report.get("rows").get(0).get("message").asString().contains("Someone changed"), report.toString());
     }
 
     @Test
@@ -203,19 +205,19 @@ class PagesApiTest {
         JsonNode refused = json(postJson(editor(), "/api/grid/items/save", bulk(List.of("zone"), false, goodRow, badRow)));
         assertFalse(refused.get("applied").asBoolean());
         assertEquals(1, refused.get("errors").asInt());
-        assertEquals("PLANNED", gridRow(good.get("name").asText()).get("status").asText(), "all or nothing");
+        assertEquals("PLANNED", gridRow(good.get("name").asString()).get("status").asString(), "all or nothing");
 
         JsonNode skipped = json(postJson(editor(), "/api/grid/items/save", bulk(List.of("zone"), true, goodRow, badRow)));
         assertTrue(skipped.get("applied").asBoolean());
         assertEquals(1, skipped.get("changed").asInt());
-        assertEquals("ACTIVE", gridRow(good.get("name").asText()).get("status").asText());
-        assertEquals("PLANNED", gridRow(other.get("name").asText()).get("status").asText(), "the bad row was left alone");
+        assertEquals("ACTIVE", gridRow(good.get("name").asString()).get("status").asString());
+        assertEquals("PLANNED", gridRow(other.get("name").asString()).get("status").asString(), "the bad row was left alone");
     }
 
     @Test
     void thePhaseMustBeOnTheItemsRouteAndSpecsMustBeAJsonObject() throws Exception {
         JsonNode planned = plannedTopLevel().get(0);
-        String name = planned.get("name").asText();
+        String name = planned.get("name").asString();
         Map<String, Object> badPhase = Map.of("row", 1, "name", name, "phase", "99");
         JsonNode phaseReport = json(postJson(editor(), "/api/grid/items/check", bulk(List.of("phase"), false, badPhase)));
         assertEquals(1, phaseReport.get("errors").asInt(), phaseReport.toString());
@@ -263,21 +265,21 @@ class PagesApiTest {
     @Test
     void anEditedWorkbookIsCheckedFirstAndThenApplied() throws Exception {
         JsonNode planned = plannedTopLevel().get(0);
-        String name = planned.get("name").asText();
+        String name = planned.get("name").asString();
         String zone = aZoneCode();
         byte[] file = workbook(new String[] {"Name", "Zone", "Version", "Notes"},
-                List.<String[]>of(new String[] {name, zone, planned.get("version").asText(), "ignored column"}));
+                List.<String[]>of(new String[] {name, zone, planned.get("version").asString(), "ignored column"}));
 
         JsonNode preview = upload(editor(), "moves.xlsx", file, false, false);
         assertFalse(preview.get("applied").asBoolean());
         assertEquals(1, preview.get("changed").asInt(), preview.toString());
         assertTrue(preview.get("notes").toString().contains("Notes"), "ignored columns are mentioned: " + preview);
-        assertEquals("PLANNED", gridRow(name).get("status").asText(), "a preview saves nothing");
+        assertEquals("PLANNED", gridRow(name).get("status").asString(), "a preview saves nothing");
 
         JsonNode applied = upload(editor(), "moves.xlsx", file, true, false);
         assertTrue(applied.get("applied").asBoolean(), applied.toString());
-        assertEquals("ACTIVE", gridRow(name).get("status").asText());
-        String history = get(viewer(), "/api/items/" + gridRow(name).get("id").asText() + "/activity").toString();
+        assertEquals("ACTIVE", gridRow(name).get("status").asString());
+        String history = get(viewer(), "/api/items/" + gridRow(name).get("id").asString() + "/activity").toString();
         assertTrue(history.contains("Imported from moves.xlsx"), history);
     }
 
@@ -285,16 +287,16 @@ class PagesApiTest {
     void importedProblemsAreReportedNotSilentlyDropped() throws Exception {
         JsonNode planned = plannedTopLevel().get(0);
         byte[] file = workbook(new String[] {"Name", "Zone"}, List.<String[]>of(
-                new String[] {planned.get("name").asText(), aZoneCode()},
+                new String[] {planned.get("name").asString(), aZoneCode()},
                 new String[] {"NOT-AN-ITEM", aZoneCode()},
-                new String[] {planned.get("name").asText(), aZoneCode()}));
+                new String[] {planned.get("name").asString(), aZoneCode()}));
         JsonNode report = upload(editor(), "problems.xlsx", file, false, false);
         assertEquals(3, report.get("total").asInt());
         assertEquals(2, report.get("errors").asInt(), "an unknown item and a duplicated item: " + report);
 
         JsonNode blocked = upload(editor(), "problems.xlsx", file, true, false);
         assertFalse(blocked.get("applied").asBoolean());
-        assertEquals("PLANNED", gridRow(planned.get("name").asText()).get("status").asText());
+        assertEquals("PLANNED", gridRow(planned.get("name").asString()).get("status").asString());
     }
 
     @Test
@@ -332,8 +334,8 @@ class PagesApiTest {
         ResponseEntity<String> added = postJson(admin(), "/api/admin/users", Map.of("identifier", "New.Person@Example.test", "role", "EDITOR"));
         assertEquals(201, added.getStatusCode().value(), added.getBody());
         JsonNode person = json(added);
-        assertEquals("new.person@example.test", person.get("email").asText(), "stored in lower case");
-        assertEquals("EDITOR", person.get("role").asText());
+        assertEquals("new.person@example.test", person.get("email").asString(), "stored in lower case");
+        assertEquals("EDITOR", person.get("role").asString());
         assertTrue(person.get("pending").asBoolean(), "has not signed in yet");
         long id = person.get("id").asLong();
 
@@ -341,7 +343,7 @@ class PagesApiTest {
                 .getStatusCode().value(), "the same address twice");
 
         JsonNode viewerNow = json(putJson(admin(), "/api/admin/users/" + id, Map.of("role", "VIEWER")));
-        assertEquals("VIEWER", viewerNow.get("role").asText());
+        assertEquals("VIEWER", viewerNow.get("role").asString());
         JsonNode noRole = json(putJson(admin(), "/api/admin/users/" + id, Map.of("role", "NONE")));
         assertTrue(noRole.get("role").isNull());
         JsonNode disabled = json(putJson(admin(), "/api/admin/users/" + id, Map.of("enabled", false)));
@@ -373,9 +375,9 @@ class PagesApiTest {
     @Test
     void theUsersResponseSaysWhetherTheseRecordsApplyToHowPeopleSignIn() throws Exception {
         JsonNode users = get(admin(), "/api/admin/users");
-        assertEquals("basic", users.get("authMode").asText());
+        assertEquals("basic", users.get("authMode").asString());
         assertFalse(users.get("signInManaged").asBoolean(), "in basic mode the roles come from the configuration");
-        assertEquals("basic", get(admin(), "/api/admin/system").get("authMode").asText());
+        assertEquals("basic", get(admin(), "/api/admin/system").get("authMode").asString());
     }
 
     @Test

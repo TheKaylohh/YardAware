@@ -1,7 +1,6 @@
 package com.shipyard.tracker.config;
 
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
-import com.fasterxml.jackson.databind.ObjectMapper;
 import com.shipyard.tracker.domain.Activity;
 import com.shipyard.tracker.domain.ActivityType;
 import com.shipyard.tracker.domain.HierarchyNode;
@@ -33,6 +32,7 @@ import org.springframework.core.annotation.Order;
 import org.springframework.core.io.ClassPathResource;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.support.TransactionTemplate;
+import tools.jackson.databind.ObjectMapper;
 
 /**
  * Fills an empty database with a yard to track the plan on: the Philly shipyard's 13 zones, 3 hulls, and for every

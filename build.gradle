@@ -1,9 +1,6 @@
 plugins {
     id 'java'
-    // 3.5.16 is the last open-source 3.5 release; the 3.5 line reached end of OSS support on 2026-06-30.
-    // Plan the move to Spring Boot 4.x (see AUTH-README "Known limits" for the one code change in SecuritySupport).
-    id 'org.springframework.boot' version '3.5.16'
-    id 'io.spring.dependency-management' version '1.1.7'
+    id 'org.springframework.boot' version '4.1.1'
 }
 
 group = 'com.shipyard'
@@ -17,24 +14,37 @@ java {
 
 repositories {
     mavenCentral()
+    mavenLocal()
 }
 
 dependencies {
+    // io.spring.dependency-management doesn't support Gradle 9 yet, so versions for the Boot-managed
+    // dependencies below (starters, postgresql, h2, flyway, testcontainers) come from Gradle's native BOM import.
+    implementation platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    // Excel export and import (.xlsx). Not managed by Spring Boot, so the version is pinned here.
+    // Excel export and import
     implementation 'org.apache.poi:poi-ooxml:5.4.0'
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'org.postgresql:postgresql'
-    runtimeOnly 'com.h2database:h2'   // local development and tests only; ProductionSafetyGuard blocks it elsewhere
+    runtimeOnly 'com.h2database:h2'   // ProductionSafetyGuard blocks it when not in dev profile
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
+    testImplementation 'org.springframework.boot:spring-boot-starter-test-classic'
+    // TestRestTemplate (brought in by starter-test-classic) builds on RestTemplateBuilder, which is its own
+    // opt-in module in Spring Boot 4 and isn't pulled in by starter-web any more.
+    testImplementation 'org.springframework.boot:spring-boot-starter-restclient'
     testImplementation 'org.springframework.security:spring-security-test'
-    testImplementation 'org.testcontainers:junit-jupiter'
-    testImplementation 'org.testcontainers:postgresql'
+    // Spring Boot's BOM pulls in testcontainers-bom via a nested <scope>import</scope>, which Gradle's native
+    // platform support doesn't follow, so it has to be imported again here to version these two.
+    // Testcontainers 2.x (what Spring Boot 4.1.1 manages) also renamed every module artifact with a
+    // "testcontainers-" prefix, e.g. junit-jupiter -> testcontainers-junit-jupiter.
+    testImplementation platform('org.testcontainers:testcontainers-bom:2.0.5')
+    testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
+    testImplementation 'org.testcontainers:testcontainers-postgresql'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
