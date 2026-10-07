@@ -18,37 +18,28 @@ repositories {
 }
 
 dependencies {
-    // io.spring.dependency-management doesn't support Gradle 9 yet, so versions for the Boot-managed
-    // dependencies below (starters, postgresql, h2, flyway, testcontainers) come from Gradle's native BOM import.
     implementation platform(org.springframework.boot.gradle.plugin.SpringBootPlugin.BOM_COORDINATES)
     implementation 'org.springframework.boot:spring-boot-starter-web'
     implementation 'org.springframework.boot:spring-boot-starter-data-jpa'
     implementation 'org.springframework.boot:spring-boot-starter-security'
     implementation 'org.springframework.boot:spring-boot-starter-oauth2-client'
     implementation 'org.springframework.boot:spring-boot-starter-actuator'
-    // Excel export and import
     implementation 'org.apache.poi:poi-ooxml:5.4.0'
     implementation 'org.flywaydb:flyway-core'
     implementation 'org.flywaydb:flyway-database-postgresql'
     runtimeOnly 'org.postgresql:postgresql'
-    runtimeOnly 'com.h2database:h2'   // ProductionSafetyGuard blocks it when not in dev profile
+    runtimeOnly 'com.h2database:h2'
     testImplementation 'org.springframework.boot:spring-boot-starter-test'
     testImplementation 'org.springframework.boot:spring-boot-starter-test-classic'
-    // TestRestTemplate (brought in by starter-test-classic) builds on RestTemplateBuilder, which is its own
-    // opt-in module in Spring Boot 4 and isn't pulled in by starter-web any more.
     testImplementation 'org.springframework.boot:spring-boot-starter-restclient'
     testImplementation 'org.springframework.security:spring-security-test'
-    // Spring Boot's BOM pulls in testcontainers-bom via a nested <scope>import</scope>, which Gradle's native
-    // platform support doesn't follow, so it has to be imported again here to version these two.
-    // Testcontainers 2.x (what Spring Boot 4.1.1 manages) also renamed every module artifact with a
-    // "testcontainers-" prefix, e.g. junit-jupiter -> testcontainers-junit-jupiter.
     testImplementation platform('org.testcontainers:testcontainers-bom:2.0.5')
     testImplementation 'org.testcontainers:testcontainers-junit-jupiter'
     testImplementation 'org.testcontainers:testcontainers-postgresql'
     testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 }
 
-// Local runs and tests use the dev profile (test users, H2, demo data) unless you pick another one.
+// Local runs and tests use the dev profile (test users, H2, demo data)
 // Production runs the jar: java -jar build/libs/yard-tracker-0.1.0.jar with SPRING_PROFILES_ACTIVE=prod
 def devProfile = System.getenv('SPRING_PROFILES_ACTIVE') ?: 'dev'
 

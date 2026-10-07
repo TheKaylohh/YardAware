@@ -1,0 +1,198 @@
+/* "Drydock" theme for the Home, Import and Admin pages.
+   Palette: navy hull ink, warm canvas ground, red-oxide primer accent, sea-green secondary.
+   Type: Franklin Gothic for headings, Segoe UI Variable for text, Cascadia/Consolas for figures.
+   Tokens are set on .page and #toasts only, so the shared menu bar keeps its own colours and font. */
+
+body.themed {
+  background: #F3EFE6;
+}
+
+.themed .page,
+.themed #toasts {
+  --ink: #10243A;
+  --ink-2: #3D5266;
+  --ink-3: #6B7C8C;
+  --paper: #F3EFE6;
+  --panel: #FFFDF9;
+  --line: #E0D8C9;
+  --line-2: #CFC5B3;
+  --steel: #8A9AA6;
+  --accent: #C0502A;
+  --accent-hover: #A2401E;
+  --accent-soft: #F8E6DD;
+  --sea: #1E7A75;
+  --sea-soft: #DCEFEC;
+  --signal: #C0502A;
+  --danger: #B3261E;
+  --head-font: "Franklin Gothic Medium", "Franklin Gothic", "Libre Franklin", "Arial Narrow", Arial, sans-serif;
+  --text-font: "Segoe UI Variable Text", "Segoe UI", system-ui, -apple-system, "Helvetica Neue", Arial, sans-serif;
+  --num-font: "Cascadia Mono", "Cascadia Code", Consolas, "SFMono-Regular", Menlo, monospace;
+  --radius: 10px;
+  --shadow: 0 1px 2px rgba(16, 36, 58, .06), 0 4px 14px rgba(16, 36, 58, .05);
+}
+
+.themed .page {
+  font-family: var(--text-font);
+  color: var(--ink);
+  background:
+    linear-gradient(180deg, rgba(30, 122, 117, .06), transparent 220px),
+    var(--paper);
+}
+.themed .page :focus-visible { outline-color: var(--accent); }
+
+/* ------------------------------------------------------------ headings */
+
+.themed .page h1,
+.themed .page h2,
+.themed .page h3,
+.themed .card-title {
+  font-family: var(--head-font);
+  font-weight: 500;
+  letter-spacing: .005em;
+}
+.themed .page h1 { font-size: 34px; color: var(--ink); }
+.themed .page h1::after {
+  content: ""; display: block; width: 56px; height: 4px; margin-top: 10px;
+  background: var(--accent); border-radius: 2px;
+}
+.themed .page h2 { font-size: 19px; color: var(--ink); }
+.themed .lede { color: var(--ink-2); font-size: 16.5px; line-height: 1.55; }
+.themed .hero { padding: 6px 0 4px; }
+.themed .hello-role {
+  font-family: var(--text-font);
+  border: 0; background: var(--sea-soft); color: var(--sea);
+  text-transform: uppercase; letter-spacing: .06em; font-size: 11.5px;
+}
+
+/* ------------------------------------------------------------ surfaces */
+
+.themed .card,
+.themed .stat,
+.themed .steps li,
+.themed .tbl-wrap,
+.themed .filebar,
+.themed .applybar {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+}
+.themed .card { padding: 18px 20px; }
+.themed .cards .card { border-top: 4px solid var(--sea); transition: border-color .15s, transform .15s, box-shadow .15s; }
+.themed a.card:hover { border-color: var(--line-2); border-top-color: var(--accent); transform: translateY(-2px); box-shadow: 0 8px 22px rgba(16, 36, 58, .1); }
+.themed .card-title { font-size: 20px; }
+.themed .card-go { color: var(--accent); }
+
+.themed .steps li { padding-left: 56px; }
+.themed .steps li::before {
+  background: var(--accent); color: #fff;
+  font-family: var(--num-font); font-weight: 600; font-size: 14px;
+  border-radius: 8px; width: 28px; height: 28px;
+}
+
+/* ------------------------------------------------------------ figures */
+
+.themed .stat { border-left: 4px solid var(--sea); }
+.themed .stat-n { font-family: var(--num-font); font-weight: 600; font-size: 28px; color: var(--ink); }
+.themed .stat-l { text-transform: uppercase; letter-spacing: .05em; font-size: 11.5px; font-weight: 600; }
+
+.themed .stack,
+.themed .bars .bar-track { background: #ECE6DA; border-radius: 6px; }
+.themed .seg-planned { background: #D8CFBF; }
+.themed .seg-consumed { background: var(--steel); }
+.themed .bars .bar-fill { background: linear-gradient(90deg, var(--sea), #2C9A92); border-radius: 6px; }
+.themed .bars .bar-n,
+.themed .ship-pct,
+.themed .rtile b { font-family: var(--num-font); font-weight: 600; }
+.themed .ship-code { font-family: var(--head-font); font-weight: 500; font-size: 15.5px; }
+
+.themed .feed li { border-bottom-color: var(--line); }
+.themed .feed .feed-what { color: var(--ink); }
+.themed .chip { background: #F4EFE5; border-color: var(--line); color: var(--ink-2); border-radius: 6px; }
+.themed .chip-you { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* ------------------------------------------------------------ tables */
+
+.themed .tbl th {
+  background: #F1EBDF; color: var(--ink-2);
+  text-transform: uppercase; letter-spacing: .05em; font-size: 11.5px; font-weight: 700;
+  border-bottom-color: var(--line-2);
+}
+.themed .tbl td { border-bottom-color: var(--line); }
+.themed .tbl tr:hover td { background: #FAF5EC; }
+.themed .tbl th[scope="row"] { text-transform: none; letter-spacing: 0; font-size: 13.5px; color: var(--ink); background: transparent; }
+.themed .report-table-wrap { border-color: var(--line); border-radius: var(--radius); background: var(--panel); }
+.themed .kv dt { color: var(--ink-3); }
+
+/* ------------------------------------------------------------ controls */
+
+.themed .btn {
+  border-color: var(--ink-2); color: var(--ink); border-radius: 8px;
+  transition: background .12s, border-color .12s, color .12s;
+}
+.themed .btn:hover { background: #EFE8DB; }
+.themed .btn-primary,
+.themed a.btn-primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+.themed .btn-primary:hover { background: var(--accent-hover); border-color: var(--accent-hover); }
+.themed .btn-primary:disabled:hover { background: var(--accent); }
+.themed .btn-danger { border-color: var(--danger); color: var(--danger); }
+.themed .btn-danger:hover { background: #FBE9E7; }
+
+.themed .field-label { color: var(--ink-2); font-size: 12.5px; text-transform: uppercase; letter-spacing: .05em; }
+.themed .field input,
+.themed .field select,
+.themed .tbl select,
+.themed .tbl input[type="text"],
+.themed .section-head input,
+.themed .toolbar input[type="search"],
+.themed .toolbar select {
+  background: #fff; border: 1px solid var(--line-2); border-radius: 8px;
+  transition: border-color .12s, box-shadow .12s;
+}
+.themed .field input:focus,
+.themed .field select:focus,
+.themed .tbl select:focus,
+.themed .section-head input:focus {
+  outline: none; border-color: var(--sea); box-shadow: 0 0 0 3px rgba(30, 122, 117, .18);
+}
+.themed input[type="checkbox"] { accent-color: var(--accent); }
+
+.themed .tab { border-color: var(--line-2); background: var(--panel); border-radius: 999px; }
+.themed .tab[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: #fff; }
+.themed .rtile { background: var(--panel); border-color: var(--line); border-radius: 8px; }
+.themed .rtile.good b { color: var(--sea); }
+
+/* ------------------------------------------------------------ messages */
+
+.themed .banner { border-radius: 8px; border-left-width: 4px; }
+.themed .banner-info { background: var(--sea-soft); border-color: #A9D3CE; border-left-color: var(--sea); }
+.themed .banner-warn { background: #FCF0DC; border-color: #EBCB94; border-left-color: #C98A1A; }
+.themed .banner-ok { background: #E3F2E6; border-color: #A9D4B2; border-left-color: #2E7D44; }
+.themed .pill { border-radius: 6px; background: #fff; border-color: var(--line); }
+.themed .pill-ok { background: #E3F2E6; border-color: #A9D4B2; color: #1E5B2C; }
+.themed .pill-warn { background: #FCF0DC; border-color: #EBCB94; }
+.themed .pill-bad { background: #FBE9E7; border-color: #F0B9B3; color: var(--danger); }
+.themed .msg-error { border-radius: 8px; }
+
+/* ------------------------------------------------------------ import drop zone */
+
+.themed .drop {
+  background: var(--panel);
+  border: 2px dashed var(--line-2);
+  border-radius: 14px;
+  box-shadow: var(--shadow);
+  transition: border-color .15s, background .15s;
+}
+.themed .drop strong { font-family: var(--head-font); font-weight: 500; font-size: 20px; }
+.themed .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.themed .drop:focus-within label.btn { outline-color: var(--accent); }
+
+.themed details > summary { color: var(--ink); }
+.themed .roles-help summary { color: var(--sea); font-weight: 600; }
+.themed .page a:not(.btn):not(.card) { color: var(--sea); text-underline-offset: 2px; }
+.themed .page a:not(.btn):not(.card):hover { color: var(--accent); }
+
+/* ------------------------------------------------------------ toasts */
+
+.themed .toast { font-family: var(--text-font); background: var(--ink); border-radius: 10px; border-left: 4px solid var(--sea); }
+.themed .toast-error { background: #8C1D18; border-left-color: #F0B9B3; }
