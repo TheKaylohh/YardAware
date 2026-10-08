@@ -125,7 +125,7 @@ body[data-mode="edit"] .mode button[aria-pressed="true"] { background: var(--sig
 /* ---------------------------------------------------------------- map */
 
 main { flex: 1; position: relative; min-height: 0; overflow: hidden; }
-#map-wrap { position: absolute; inset: 0; background: #CBD2C9; }
+#map-wrap { position: absolute; inset: 0; background: #9FBAC6; }
 
 #map {
   display: block;

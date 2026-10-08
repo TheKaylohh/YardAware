@@ -6,7 +6,8 @@ import { state, emit } from './state.js';
 import { s, clear, NEUTRAL_OUTLINE, LEVEL_CODES } from './util.js';
 
 const MAP_W = 1800;
-const MAP_H = 1500;
+const MAP_H = 1560; // 7.5 wide x 6.5 tall
+const BACKDROP_PAD = Math.max(MAP_W, MAP_H) * 2; // covers the furthest you can pan or zoom out
 const CELL_W = 68;
 const CELL_H = 72;
 const TILE = 40;
@@ -27,6 +28,7 @@ const zoneGeometry = new Map(); // zoneId -> { zone, points: [[x, y], ...], bbox
 
 export function initMap(container) {
   svg = s('svg', { id: 'map', viewBox: `0 0 ${MAP_W} ${MAP_H}`, role: 'group', 'aria-label': 'Yard map' });
+  svg.append(backdrop());
   svg.append(s('image', { href: '/img/yard.svg', x: 0, y: 0, width: MAP_W, height: MAP_H }));
   zoneLayer = s('g', { class: 'zones' });
   itemLayer = s('g', { class: 'items' });
@@ -45,6 +47,22 @@ export function initMap(container) {
   byId('zoom-fit')?.addEventListener('click', fit);
   window.addEventListener('resize', fit);
   fit();
+}
+
+// Open water around the map sheet, so panning past the edge shows river rather than a blank fill.
+function backdrop() {
+  const area = { x: -BACKDROP_PAD, y: -BACKDROP_PAD, width: MAP_W + 2 * BACKDROP_PAD, height: MAP_H + 2 * BACKDROP_PAD };
+  const wave = (d) => s('path', { d, fill: 'none', stroke: '#7E9FAE', 'stroke-width': 1.3, 'stroke-linecap': 'round', opacity: 0.45 });
+  return s('g', { class: 'backdrop', 'aria-hidden': 'true' },
+    s('defs', {},
+      s('pattern', { id: 'map-waves', patternUnits: 'userSpaceOnUse', width: 170, height: 140 },
+        wave('M10,40 q12,-6 24,0 t24,0 t24,0'),
+        wave('M95,110 q12,-6 24,0 t24,0 t24,0'))),
+    s('rect', { ...area, fill: '#9FBAC6' }),
+    s('rect', { ...area, fill: 'url(#map-waves)' }),
+    // Soft shadow so the map reads as a chart laid on the water
+    s('rect', { x: 6, y: 10, width: MAP_W, height: MAP_H, fill: '#14232E', opacity: 0.18 }),
+    s('rect', { x: 3, y: 5, width: MAP_W, height: MAP_H, fill: '#14232E', opacity: 0.12 }));
 }
 
 // ------------------------------------------------------------------ view
